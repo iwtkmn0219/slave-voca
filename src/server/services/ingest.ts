@@ -1,5 +1,7 @@
+import { isAcademic } from '@/lib/extract/academic';
+import { inDictionary } from '@/lib/extract/dictionary';
 import { extractCandidates } from '@/lib/extract/extract';
-import { rankOf } from '@/lib/extract/frequency';
+import { isFrequentWord, rankOf } from '@/lib/extract/frequency';
 import { NoTextError, parsePdf } from '@/lib/pdf/parse';
 import { MAX_PDF_BYTES, pdfSizeError } from '@/lib/upload/limits';
 import type { Db } from '../db/client';
@@ -31,12 +33,14 @@ export interface IngestResult {
 }
 
 const PDF_MAGIC = '%PDF-';
+// PDF 규격은 파일 앞 1,024바이트 안에 헤더가 있으면 허용한다(앞에 붙은 쓰레기 바이트).
+const PDF_MAGIC_WINDOW = 1024;
 
 export function validateUpload(bytes: Uint8Array): void {
   const sizeError = pdfSizeError(bytes.length);
   if (sizeError) throw new UploadError(sizeError);
-  const head = new TextDecoder().decode(bytes.subarray(0, PDF_MAGIC.length));
-  if (head !== PDF_MAGIC) throw new UploadError('PDF 파일이 아닙니다.');
+  const head = new TextDecoder('latin1').decode(bytes.subarray(0, PDF_MAGIC_WINDOW));
+  if (!head.includes(PDF_MAGIC)) throw new UploadError('PDF 파일이 아닙니다.');
 }
 
 export function defaultTitle(fileName: string): string {
@@ -50,13 +54,15 @@ export async function ingestPdf(db: Db, input: IngestInput): Promise<IngestResul
   const doc = createDocument(db, { title, kind: input.kind });
 
   try {
-    const sentences = await parsePdf(input.bytes);
+    const sentences = await parsePdf(input.bytes, { isKnownWord: isFrequentWord });
     const settings = getSettings(db);
     const found = extractCandidates(sentences, {
       excludeTopN: settings.excludeTopN,
       rankOf,
       knownLemmas: listKnownLemmas(db),
       existingLemmas: listWordLemmas(db),
+      isAcademic,
+      inDictionary,
     });
     replaceCandidates(db, doc.id, found);
     const status: DocumentStatus = found.length === 0 ? 'done' : 'reviewing';

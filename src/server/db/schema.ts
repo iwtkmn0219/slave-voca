@@ -30,6 +30,7 @@ export const candidates = sqliteTable('candidates', {
   sentence: text('sentence').notNull(),
   count: integer('count').notNull(),
   isExisting: integer('is_existing', { mode: 'boolean' }).notNull(),
+  inDictionary: integer('in_dictionary', { mode: 'boolean' }).notNull().default(true),
 });
 
 // 카드. 복습(FSRS) 컬럼은 마일스톤 3에서 추가한다.
