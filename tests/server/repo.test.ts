@@ -55,6 +55,19 @@ describe('candidates repo', () => {
     expect(listCandidates(db, doc.id).map((c) => c.lemma)).toEqual(['zeta', 'alpha', 'beta']);
   });
 
+  it('stores more candidates than one INSERT can bind', () => {
+    // 한 행에 변수 6개라 SQLite 상한(32766)으로는 5461행까지만 한 번에 넣을 수 있다.
+    const doc = createDocument(db, { title: 'Thesis', kind: 'paper' });
+    const many = Array.from({ length: 6000 }, (_, i) =>
+      candidate(`word${String(i).padStart(4, '0')}`, i % 3),
+    );
+    replaceCandidates(db, doc.id, many);
+    const stored = listCandidates(db, doc.id);
+    expect(stored).toHaveLength(6000);
+    expect(stored[0]).toMatchObject({ lemma: 'word0002', count: 2 });
+    expect(stored.at(-1)).toMatchObject({ lemma: 'word5997', count: 0 });
+  });
+
   it('counts candidates per document', () => {
     const a = createDocument(db, { title: 'A', kind: 'paper' });
     const b = createDocument(db, { title: 'B', kind: 'paper' });

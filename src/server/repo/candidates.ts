@@ -3,12 +3,15 @@ import type { Candidate } from '@/lib/extract/extract';
 import type { Db } from '../db/client';
 import { candidates, type CandidateRow } from '../db/schema';
 
+// 한 행에 변수 6개라 SQLite 상한(32766) 안에 들도록 나눠 넣는다.
+const INSERT_CHUNK = 1000;
+
 export function replaceCandidates(db: Db, documentId: number, list: Candidate[]): void {
   db.transaction((tx) => {
     tx.delete(candidates).where(eq(candidates.documentId, documentId)).run();
-    if (list.length > 0) {
+    for (let i = 0; i < list.length; i += INSERT_CHUNK) {
       tx.insert(candidates)
-        .values(list.map((c) => ({ ...c, documentId })))
+        .values(list.slice(i, i + INSERT_CHUNK).map((c) => ({ ...c, documentId })))
         .run();
     }
   });
