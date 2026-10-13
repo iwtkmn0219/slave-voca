@@ -1,5 +1,5 @@
 import { mapWithConcurrency } from '@/lib/async/pool';
-import { createClaudeMeaningModel } from '@/lib/meaning/claude';
+import { createGeminiMeaningModel } from '@/lib/meaning/gemini';
 import { generateMeanings, type MeaningModel } from '@/lib/meaning/generate';
 import { createPhoneticLookup } from '@/lib/phonetic/lookup';
 import type { Db } from '../db/client';
@@ -24,7 +24,7 @@ export interface EnrichDeps {
 
 export function defaultEnrichDeps(): EnrichDeps {
   return {
-    meaningModel: process.env.ANTHROPIC_API_KEY ? createClaudeMeaningModel() : null,
+    meaningModel: process.env.GEMINI_API_KEY ? createGeminiMeaningModel() : null,
     // 저장마다 새 차단기: 사전 API가 죽어 있으면 연속 5번 실패 후 나머지 조회를 건너뛴다.
     lookupPhonetic: createPhoneticLookup(),
   };

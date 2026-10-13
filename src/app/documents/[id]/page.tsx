@@ -26,7 +26,7 @@ async function DocumentWords({ params }: { params: Promise<{ id: string }> }) {
   if (!doc) notFound();
   const rows = listOccurrencesByDocument(db, id);
   const failed = rows.filter((r) => r.meaningStatus === "failed").length;
-  const missingKey = !process.env.ANTHROPIC_API_KEY;
+  const missingKey = !process.env.GEMINI_API_KEY;
 
   return (
     <main className="space-y-4">
@@ -42,7 +42,7 @@ async function DocumentWords({ params }: { params: Promise<{ id: string }> }) {
       {failed > 0 && (
         <p role="alert" className="rounded bg-yellow-50 p-3 text-sm">
           {missingKey
-            ? `ANTHROPIC_API_KEY가 설정되지 않아 뜻 ${failed}개를 만들지 못했습니다. .env.local에 키를 넣고 서버를 다시 시작하세요.`
+            ? `GEMINI_API_KEY가 설정되지 않아 뜻 ${failed}개를 만들지 못했습니다. .env.local에 키를 넣고 서버를 다시 시작하세요.`
             : `뜻 ${failed}개를 만들지 못했습니다.`}
         </p>
       )}
