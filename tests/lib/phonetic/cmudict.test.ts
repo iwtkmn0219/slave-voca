@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { arpabetToIpa } from '@/lib/phonetic/arpabet';
 import { cmudictLookup, createCmudict, withCmudictFallback } from '@/lib/phonetic/cmudict';
 
@@ -55,5 +55,16 @@ describe('withCmudictFallback', () => {
     expect(await lookup('robust')).toBe('/rəʊˈbʌst/');
     expect(await lookup('paradigm')).toBe('/ˈpɛrəˌdaɪm/');
     expect(await lookup('dmodel')).toBeNull();
+  });
+
+  it('returns null and logs once when the fallback itself fails', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const lookup = withCmudictFallback(async () => null, () => {
+      throw new Error('cmudict.txt not found');
+    });
+    expect(await lookup('robust')).toBeNull();
+    expect(await lookup('paradigm')).toBeNull();
+    expect(errors).toHaveBeenCalledTimes(1);
+    errors.mockRestore();
   });
 });

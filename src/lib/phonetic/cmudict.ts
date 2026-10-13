@@ -28,9 +28,21 @@ export function cmudictLookup(word: string): string | null {
 }
 
 // API 조회가 실패하거나 못 찾으면 CMUdict로 채운다.
+// 보조 조회가 실패해도(파일 없음 등) 저장 전체를 오류로 만들지 않고 null을 준다. 로그는 한 번만 남긴다.
 export function withCmudictFallback(
   lookup: (word: string) => Promise<string | null>,
   fallback: PhoneticSource = cmudictLookup,
 ): (word: string) => Promise<string | null> {
-  return async (word) => (await lookup(word)) ?? fallback(word);
+  let logged = false;
+  return async (word) => {
+    const found = await lookup(word);
+    if (found) return found;
+    try {
+      return fallback(word);
+    } catch (err) {
+      if (!logged) console.error('CMUdict 발음기호 조회 실패', err);
+      logged = true;
+      return null;
+    }
+  };
 }
