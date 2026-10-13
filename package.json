@@ -13,6 +13,7 @@
     "freq:build": "tsx scripts/build-frequency.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.133.0",
     "better-sqlite3": "13.0.3",
     "drizzle-orm": "0.45.4",
     "next": "16.4.0",
@@ -20,7 +21,8 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "wink-lemmatizer": "3.0.4",
-    "wink-lexicon": "2.2.0"
+    "wink-lexicon": "2.2.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
