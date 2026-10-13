@@ -1,8 +1,8 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { z } from 'zod';
 import type { MeaningModel } from './generate';
 
-export const MEANING_MODEL_ID = 'gemini-2.5-flash-lite';
+export const MEANING_MODEL_ID = 'gemini-3.5-flash-lite';
 
 const SYSTEM_INSTRUCTION = [
   '너는 영어 논문·발표 자료를 읽는 한국인 학습자를 돕는다.',
@@ -33,7 +33,7 @@ const OutputSchema = z.object({
 
 export type GeminiClient = Pick<GoogleGenAI, 'models'>;
 
-// Gemini 2.5 Flash-Lite로 문맥 뜻을 만든다. 키는 GEMINI_API_KEY에서 읽는다(서버 전용).
+// Gemini 3.5 Flash-Lite로 문맥 뜻을 만든다. 키는 GEMINI_API_KEY에서 읽는다(서버 전용).
 export function createGeminiMeaningModel(
   client: GeminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }),
 ): MeaningModel {
@@ -45,7 +45,8 @@ export function createGeminiMeaningModel(
         systemInstruction: SYSTEM_INSTRUCTION,
         responseMimeType: 'application/json',
         responseJsonSchema: RESPONSE_JSON_SCHEMA,
-        thinkingConfig: { thinkingBudget: 0 }, // 짧은 뜻 생성에는 사고 토큰이 필요 없다(비용 절감)
+        // 3.x는 사고를 끌 수 없다. 가장 낮은 MINIMAL로 사고 토큰(출력 요금에 포함)을 줄인다.
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
         maxOutputTokens: 8192,
       },
     });

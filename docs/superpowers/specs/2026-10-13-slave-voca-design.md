@@ -24,7 +24,7 @@
 | 스택 | Next.js(App Router, TypeScript) 하나로 화면과 서버 |
 | DB | SQLite (Drizzle ORM + better-sqlite3) |
 | 단어 추출 | 빈도 기준. 흔한 단어 상위 5,000개(원형 기준) 제외, 설정에서 변경 가능 |
-| 문맥 뜻 | Gemini 2.5 Flash-Lite (`gemini-2.5-flash-lite`), 문서 단위로 묶어 요청 (2026-10-13 Claude Haiku 5.5에서 교체) |
+| 문맥 뜻 | Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`), 문서 단위로 묶어 요청 (2026-10-13 Claude Haiku 5.5에서 교체) |
 | 발음기호 | Free Dictionary API (`api.dictionaryapi.dev`) |
 | 발음 듣기 | 브라우저 내장 Web Speech API (`speechSynthesis`, en-US) |
 | 암기 방식 | FSRS 간격 반복 (`ts-fsrs` 라이브러리) |
@@ -130,8 +130,9 @@ scripts/
 
 ### 8.4 문맥 뜻 생성 (`lib/meaning/generate.ts`)
 
-- `@google/genai`(2.24.0 고정), 모델 `gemini-2.5-flash-lite`, `thinkingConfig.thinkingBudget: 0`(사고 토큰 끔)
-- 가격(공식, 2026-10-13 확인): 유료 입력 $0.10 / 출력 $0.40(100만 토큰당). 무료 등급도 있지만 **무료 등급 입력은 Google이 제품 개선에 사용한다.** 공개되지 않은 자료를 다룰 때는 유료 등급 키를 쓴다.
+- `@google/genai`(2.24.0 고정), 모델 `gemini-3.5-flash-lite`, `thinkingConfig.thinkingLevel: MINIMAL`. 3.x 모델은 사고를 끌 수 없어(`thinkingBudget` 없음) 가장 낮은 단계를 쓴다.
+- 모델 선택 이유: `gemini-2.5-flash-lite`가 더 싸지만($0.10/$0.40) Google이 2.5 모델을 "예전에 쓴 사용자"에게만 열어 두어 새 키로는 쓸 수 없다(공식 deprecations 페이지, 2026-10-13 확인). `gemini-3.1-flash-lite`($0.25/$1.50)는 2027-05-07 종료 예정이라 배포용으로 고르지 않았다.
+- 가격(공식, 2026-10-13 확인): 유료 입력 $0.30 / 출력 $2.50(100만 토큰당, 출력에 사고 토큰 포함). 논문 1편(단어 약 100개)에 약 $0.008로 추정. 참고로 Claude Haiku 5.5는 $0.10/$0.50으로 유료 기준은 더 싸지만 무료 등급이 없다. 무료 등급도 있지만 **무료 등급 입력은 Google이 제품 개선에 사용한다.** 공개되지 않은 자료를 다룰 때는 유료 등급 키를 쓴다.
 - 모델 교체 지점: `MeaningModel` 함수 형태만 지키면 다른 모델로 바꿀 수 있다. 화면·DB·`generate.ts`는 바뀌지 않는다.
 - 한 요청에 최대 50개의 (id, 단어, 원문 문장)을 담는다. 100개면 2번 요청한다.
 - 구조화 출력(`responseMimeType: "application/json"` + `responseJsonSchema`)으로 `{ meanings: [{ id, meaning_ko }] }`를 받고, zod로 한 번 더 검증한다. 응답이 비었거나(차단 등) 형식이 틀리면 그 묶음은 실패로 처리한다.
@@ -208,3 +209,4 @@ scripts/
 - 2026-10-13: M2 리뷰 반영. 8.1 하이픈 판정에 WordNet 사전 추가, AWL 절 번호를 8.7로 바로잡음(8.6 SRS와 중복), AWL 미국식 철자 추가, AWL 범위의 한계 명시
 - 2026-10-13: M2 완료 반영. 8.5에 CMUdict 보조와 429 장애 처리 추가(사전 API가 하루 종일 응답하지 않아 카드 203개 중 1개만 발음기호가 채워짐), 마일스톤 3·4 범위에 M2 리뷰 항목 배정
 - 2026-10-13: 문맥 뜻 모델을 Claude Haiku 5.5에서 Gemini 2.5 Flash-Lite로 교체(사용자 결정: 배포 시 비용·무료 등급 고려). 8.4, 2장, 6장, 9장, 10장, 12장 수정
+- 2026-10-13: 뜻 모델을 Gemini 3.5 Flash-Lite로 확정(2.5는 새 사용자 접근 제한, Developer·CodeReviewer가 발견). 사고 설정을 `thinkingLevel: MINIMAL`로 변경, 가격 갱신
