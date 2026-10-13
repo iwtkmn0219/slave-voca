@@ -40,6 +40,29 @@ describe('cleanText', () => {
     );
   });
 
+  it('accepts a section number before the References heading', () => {
+    expect(cleanText('Body.\n6 References\nSmith, 2020.')).toBe('Body.');
+    expect(cleanText('Body.\n7. REFERENCES\nSmith, 2020.')).toBe('Body.');
+  });
+
+  it('keeps the hyphen of a compound split at a line end', () => {
+    const known = new Set(['fine', 'tuning', 'inter', 'national', 'international']);
+    const isKnownWord = (w: string) => known.has(w);
+    expect(cleanText('we use fine-\ntuning here', { isKnownWord })).toBe(
+      'we use fine-tuning here',
+    );
+    expect(cleanText('the inter-\nnational case', { isKnownWord })).toBe(
+      'the international case',
+    );
+    expect(cleanText('a hetero-\ngeneous set', { isKnownWord })).toBe('a heterogeneous set');
+  });
+
+  it('removes email addresses and URLs', () => {
+    expect(
+      cleanText('Ashish {avaswani,noam}@google.com and code at https://github.com/x/y here.'),
+    ).toBe('Ashish and code at here.');
+  });
+
   it('keeps text when "references" appears inside a sentence', () => {
     expect(cleanText('Prior references\nsupport this claim.')).toBe(
       'Prior references support this claim.',
