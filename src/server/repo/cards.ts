@@ -103,6 +103,17 @@ export function markMeaningsFailed(db: Db, occurrenceIds: readonly number[]): vo
     .run();
 }
 
+// 채우기가 중간에 실패했을 때: 아직 pending인 용례만 failed로 바꾼다(이미 done인 뜻은 둔다).
+export function markPendingMeaningsFailed(db: Db, occurrenceIds: readonly number[]): void {
+  if (occurrenceIds.length === 0) return;
+  db.update(occurrences)
+    .set({ meaningStatus: 'failed' })
+    .where(
+      and(inArray(occurrences.id, [...occurrenceIds]), eq(occurrences.meaningStatus, 'pending')),
+    )
+    .run();
+}
+
 export function listWordsMissingPhonetic(
   db: Db,
   wordIds: readonly number[],

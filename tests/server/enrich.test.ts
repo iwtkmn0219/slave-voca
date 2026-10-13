@@ -59,6 +59,40 @@ describe('enrichDocument', () => {
     expect(getDocument(db, doc.id)?.status).toBe('done');
   });
 
+  it('marks the document error and pending meanings failed when enrichment throws', async () => {
+    const { doc, saved } = savedDocument(['robust', 'paradigm']);
+    // 모델 함수 밖에서 예외가 나는 경우(잘못된 응답 모양): 뜻은 pending으로 남아 있다.
+    const broken = deps({
+      meaningModel: async (batch) => batch.map((r) => ({ id: r.id }) as { id: number; meaningKo: string }),
+    });
+    await enrichDocument(db, doc.id, saved, broken);
+
+    expect(getDocument(db, doc.id)).toMatchObject({
+      status: 'error',
+      errorMessage: '뜻과 발음을 채우지 못했습니다.',
+    });
+    const rows = listOccurrencesByDocument(db, doc.id);
+    expect(rows.map((r) => r.meaningStatus)).toEqual(['failed', 'failed']);
+    expect(db.select().from(words).all()).toHaveLength(2); // 저장된 카드는 그대로 둔다
+  });
+
+  it('keeps meanings that were done when only the phonetic step throws', async () => {
+    const { doc, saved } = savedDocument(['robust']);
+    await enrichDocument(
+      db,
+      doc.id,
+      saved,
+      deps({
+        lookupPhonetic: async () => {
+          throw new Error('boom');
+        },
+      }),
+    );
+
+    expect(getDocument(db, doc.id)?.status).toBe('error');
+    expect(listOccurrencesByDocument(db, doc.id)[0].meaningStatus).toBe('done');
+  });
+
   it('skips phonetic lookups for words that already have one', async () => {
     db.insert(words).values({ lemma: 'robust', phonetic: '/old/' }).run();
     const { doc, saved } = savedDocument(['robust']);
