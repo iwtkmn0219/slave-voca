@@ -1,0 +1,180 @@
+# slave-voca 설계서
+
+- 작성일: 2026-10-13
+- 상태: 사용자 검토 대기
+- 관련 제안서: https://claude.ai/code/artifact/6220a7b4-f86c-417b-833d-8e7f3a3414ae
+
+## 1. 목적
+
+논문·발표 자료 PDF에서 어려운 영어 단어를 자동으로 뽑아, 원문 문장 기준의 한국어 뜻과 발음을 붙인 카드로 만들고 간격 반복(SRS)으로 외우게 하는 개인용 웹앱이다.
+
+**성공 기준**
+
+- 텍스트 선택이 가능한 논문 PDF 한 편을 넣고 추출·검토·저장까지 5분 이내
+- 저장된 모든 카드에 문맥상 한국어 뜻, 발음기호(사전에 있으면), 발음 듣기, 원문 문장이 있음
+- 오늘 복습할 카드만 모아 보여주고, 응답에 따라 다음 복습일이 자동으로 바뀜
+
+## 2. 확정된 결정
+
+| 항목 | 결정 |
+|---|---|
+| 사용자 | 본인 1명, 로그인 없음 |
+| 실행 환경 | 로컬 PC에서 실행, PC 브라우저로 접속 |
+| 배포 | 1차 범위 밖. 단, 저장소 계층을 분리해 나중에 옮기기 쉽게 설계 |
+| 스택 | Next.js(App Router, TypeScript) 하나로 화면과 서버 |
+| DB | SQLite (Drizzle ORM + better-sqlite3) |
+| 단어 추출 | 빈도 기준. 흔한 단어 상위 5,000개(원형 기준) 제외, 설정에서 변경 가능 |
+| 문맥 뜻 | Claude Haiku 5.5 (`claude-haiku-5-5`), 문서 단위로 묶어 요청 |
+| 발음기호 | Free Dictionary API (`api.dictionaryapi.dev`) |
+| 발음 듣기 | 브라우저 내장 Web Speech API (`speechSynthesis`, en-US) |
+| 암기 방식 | FSRS 간격 반복 (`ts-fsrs` 라이브러리) |
+| 새 카드 상한 | 하루 20장, 남은 카드는 다음 날로 이월. 설정에서 변경 가능 |
+
+## 3. 범위
+
+**1차에 포함:** PDF 업로드, 후보 단어 추출, 검토 화면, 문맥 뜻 생성, 발음기호·발음 듣기, 문서별 단어 목록, SRS 복습, 카드 뜻 수정·삭제, 설정(N, 새 카드 상한)
+
+**1차에서 제외:** 스캔 PDF(OCR), 여러 단어로 된 구문 추출, 배포·로그인, 모바일 화면, 학습 통계, Anki 내보내기
+
+## 4. 사용 흐름
+
+1. **업로드:** 사용자가 PDF와 종류(논문/발표)를 고른다. 제목은 파일명에서 기본값을 채운다.
+2. **추출:** 서버가 텍스트를 문장으로 나누고, 후보 단어 목록을 만들어 `candidates`에 저장한다.
+3. **검토:** 사용자가 후보 목록에서 아는 단어를 체크 해제하고 "저장"을 누른다.
+   - 체크 해제한 단어 → `known_words`에 추가, 이후 모든 추출에서 제외
+   - 체크한 단어 → `words`(카드)와 `occurrences`(용례) 생성
+4. **뜻·발음 채우기:** 저장 직후 서버가 문맥 뜻과 발음기호를 채운다. 화면은 진행 상태를 보여준다.
+5. **복습:** 매일 "오늘의 복습"에서 카드를 보고 모름/애매/앎으로 응답한다.
+
+## 5. 화면
+
+| 경로 | 화면 | 내용 |
+|---|---|---|
+| `/` | 홈 | 오늘 복습할 카드 수(복습/새 카드), "복습 시작" 버튼, 최근 문서 |
+| `/documents` | 문서 목록 | 업로드 폼, 문서별 상태(검토 대기/처리 중/완료/오류)와 단어 수 |
+| `/documents/[id]/review` | 검토 | 후보 표: 체크박스, 단어(원형), 문서 내 등장 횟수, 원문 문장(단어 강조), "이미 학습 중" 표시. 전체 선택/해제, 저장 |
+| `/documents/[id]` | 문서 단어 목록 | 이 문서의 용례 목록: 단어, 발음기호, 문맥 뜻, 원문 문장. 뜻 수정, 실패한 뜻 재시도, 카드 삭제 |
+| `/study` | 복습 | 앞면: 단어 + 발음 버튼. 뒷면: 발음기호, 문맥 뜻, 원문 문장(용례가 여럿이면 최신 2개). 모름/애매/앎 버튼 |
+| `/settings` | 설정 | 제외 기준 N, 하루 새 카드 상한 |
+
+## 6. 모듈 구조
+
+```
+src/
+  app/                    Next.js 화면과 Route Handler / Server Action
+  lib/
+    pdf/parse.ts          PDF → 정제된 문장 배열
+    extract/extract.ts    문장 배열 → 후보 단어 목록
+    extract/frequency.ts  빈도표 로드, 원형의 순위 조회
+    meaning/generate.ts   (단어, 문장) 묶음 → 한국어 뜻 (Claude API)
+    phonetic/lookup.ts    단어 → 발음기호 (Free Dictionary API)
+    srs/scheduler.ts      응답 → 다음 복습 상태, 오늘의 복습 큐
+  server/
+    db/schema.ts          Drizzle 스키마
+    db/client.ts          DB 연결 (교체 지점)
+    repo/*.ts             모든 DB 읽기·쓰기
+data/
+  frequency.json          원형 → 순위 (빌드 스크립트로 생성)
+scripts/
+  build-frequency.ts      공개 영어 빈도 목록 → 원형 기준 순위표
+```
+
+**원칙:** `lib/` 모듈은 DB를 모르고 입력→출력만 다룬다. DB 접근은 `server/repo/`에서만 한다. 배포로 옮길 때는 `db/client.ts`와 스키마 방언만 바꾼다.
+
+## 7. 데이터 모델
+
+| 테이블 | 컬럼 | 비고 |
+|---|---|---|
+| `documents` | id, title, kind(paper/presentation), status(extracting/reviewing/processing/done/error), error_message, created_at | 원본 PDF는 저장하지 않음 |
+| `candidates` | id, document_id, lemma, surface, sentence, count, is_existing | 검토가 끝나면 해당 문서 행 삭제 |
+| `words` | id, lemma(unique), phonetic, FSRS 상태(due, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_review), introduced_at, created_at | 카드 1장 = 단어 1개 |
+| `occurrences` | id, word_id, document_id, surface, sentence, meaning_ko, meaning_status(pending/done/failed), created_at | 같은 단어도 문서마다 뜻이 다를 수 있어 뜻은 여기에 저장 |
+| `known_words` | lemma(PK), created_at | 추출에서 제외 |
+| `review_logs` | id, word_id, rating, reviewed_at | 복습 기록 |
+| `settings` | key(PK), value | `exclude_top_n`=5000, `daily_new_limit`=20 |
+
+- 같은 단어가 다른 문서에서 다시 저장되면 `words`는 그대로 두고 `occurrences`만 추가한다. SRS 상태는 초기화하지 않는다.
+- 카드 삭제는 `words`와 그 `occurrences`, `review_logs`를 함께 지운다. 삭제한 단어는 `known_words`에 넣지 않는다.
+
+## 8. 처리 규칙
+
+### 8.1 PDF 파싱 (`lib/pdf/parse.ts`)
+
+- `pdfjs-dist`로 페이지별 텍스트를 읽는다.
+- 줄 끝 하이픈 복원: `"inter-\nnational"` → `"international"` (하이픈 뒤 줄바꿈이고 다음 글자가 소문자일 때만)
+- "References", "Bibliography", "참고문헌"이 단독 줄로 나오는 지점부터 끝까지 버린다.
+- `Intl.Segmenter('en', { granularity: 'sentence' })`로 문장을 나눈다.
+- 공백을 제외한 추출 텍스트가 200자 미만이면 실패로 처리한다: "텍스트를 찾지 못했습니다. 스캔 PDF는 지원하지 않습니다."
+
+### 8.2 단어 추출 (`lib/extract/extract.ts`)
+
+1. 문장마다 `/[A-Za-z]+(?:-[A-Za-z]+)*/g`로 토큰을 뽑는다.
+2. 3글자 미만, 모두 대문자인 약어(예: `CNN`), 하이픈 복합어는 버린다.
+3. 소문자로 바꾸고 `wink-lemmatizer`로 원형을 만든다(명사→동사→형용사 순으로 시도해 사전에 있는 첫 결과).
+4. 문장 첫 단어가 아닌 위치에서 **항상 대문자로만** 나온 단어는 고유명사로 보고 버린다.
+5. 빈도 순위가 `exclude_top_n` 이하인 원형과 `known_words`에 있는 원형을 버린다. 빈도표에 없는 원형은 남긴다(전문용어일 가능성이 높음).
+6. 원형별로 묶어 등장 횟수와 첫 등장 문장(최대 300자)을 기록한다. `words`에 이미 있으면 `is_existing=true`.
+7. 등장 횟수 내림차순, 같으면 알파벳순으로 정렬한다.
+
+### 8.3 빈도표 (`scripts/build-frequency.ts`)
+
+- 입력: 공개 영어 빈도 목록 `first20hours/google-10000-english`의 `20k.txt` (빈도순 단어 2만 개)
+- 각 단어를 8.2의 3번과 같은 방식으로 원형화하고, 원형별 **가장 높은 순위**를 남겨 `data/frequency.json`으로 저장한다.
+- 리스크: 이 목록은 웹 문서 기반이라 학술 기본어 순위가 실제와 다를 수 있다. 마일스톤 1에서 실제 논문 3편으로 확인한다.
+
+### 8.4 문맥 뜻 생성 (`lib/meaning/generate.ts`)
+
+- `@anthropic-ai/sdk`, 모델 `claude-haiku-5-5`, `output_config.effort: "low"`
+- 한 요청에 최대 50개의 (id, 단어, 원문 문장)을 담는다. 100개면 2번 요청한다.
+- 구조화 출력(`output_config.format`의 JSON 스키마)으로 `[{ id, meaning_ko }]`를 받는다.
+- 시스템 지시: "각 단어가 주어진 문장에서 쓰인 의미를 한국어로 짧게(2~15자, 품사에 맞게) 답하라. 사전의 첫 뜻이 아니라 이 문장 속 의미를 쓴다."
+- API 키는 환경변수 `ANTHROPIC_API_KEY`(`.env.local`)에서 읽고, 서버에서만 사용한다.
+- 응답에 빠진 id나 요청 실패는 해당 용례를 `meaning_status=failed`로 둔다. 문서 단어 목록에서 재시도할 수 있다.
+- SDK 사용법은 구현 시 claude-api 스킬의 TypeScript 문서를 따른다.
+
+### 8.5 발음기호 (`lib/phonetic/lookup.ts`)
+
+- `GET https://api.dictionaryapi.dev/api/v2/entries/en/{lemma}` 응답에서 첫 번째로 비어 있지 않은 `phonetic` 또는 `phonetics[].text`를 쓴다.
+- 404나 오류가 나면 `phonetic=null`로 둔다. 재시도하지 않는다.
+- 동시 요청은 5개로 제한한다.
+
+### 8.6 SRS (`lib/srs/scheduler.ts`)
+
+- `ts-fsrs` 기본 파라미터를 쓴다. 응답은 모름→Again, 애매→Hard, 앎→Good에 대응한다.
+- **오늘의 큐:** (1) `state != New`이고 `due <= 지금`인 카드, due 오름차순 + (2) 새 카드 중 `created_at` 오름차순으로 `daily_new_limit - 오늘 처음 본 새 카드 수`장
+- 새 카드를 처음 응답하면 `introduced_at`을 기록한다. "오늘"은 로컬 자정을 기준으로 한다.
+- 큐는 복습 화면을 열 때 계산하고, 응답할 때마다 서버에 저장한다. Again을 받은 카드는 같은 세션 끝에 다시 보여준다.
+
+## 9. 오류 처리
+
+| 상황 | 처리 |
+|---|---|
+| PDF가 아님, 50MB 초과 | 업로드 거부, 메시지 표시 |
+| 텍스트 없음(스캔 PDF) | 문서 `status=error`, 사유 표시 |
+| 후보 0개 | 검토 화면에 "외울 단어가 없습니다" 표시, 문서는 `done` |
+| `ANTHROPIC_API_KEY` 없음 | 카드는 저장하고 뜻은 `failed`, 화면에 키 설정 안내 |
+| Claude API 실패, 응답 누락 | 해당 용례 `failed`, 재시도 버튼 |
+| 사전 API 실패 | 발음기호만 비움, 발음 듣기는 유지 |
+| 브라우저 TTS 없음 | 발음 버튼 숨김 |
+
+## 10. 테스트
+
+- **단위 테스트 (Vitest)**
+  - `pdf/parse`: 하이픈 복원, 참고문헌 제거, 문장 분리, 텍스트 부족 판정 (텍스트 픽스처 사용)
+  - `extract`: 길이·약어·고유명사 제외, 원형 통합(studies/studied→study), N 기준, known_words 제외, 정렬
+  - `srs/scheduler`: 오늘의 큐 구성, 새 카드 상한, 이월, 자정 경계
+  - `meaning/generate`: SDK를 목으로 대체해 묶음 분할, 누락 id → failed, 오류 → failed
+  - `repo`: 메모리 SQLite로 같은 단어 재저장 시 용례만 추가, 카드 삭제 연쇄
+- **수동 확인:** 실제 논문 PDF 3편(1단 1편, 2단 2편)으로 추출 품질과 처리 시간 5분 이내를 확인한다.
+- 실제 Claude API 호출은 수동 확인에서만 한다.
+
+## 11. 마일스톤
+
+1. **추출 검증:** 프로젝트 골격, PDF 파싱, 빈도표, 단어 추출, 검토 화면(저장 전까지). 논문 3편으로 품질 확인
+2. **카드 만들기:** DB 스키마, 저장, known_words, 문맥 뜻 생성, 발음기호
+3. **복습:** 오늘의 큐, 복습 화면, TTS, FSRS 갱신
+4. **다듬기:** 문서 단어 목록, 뜻 수정·재시도, 카드 삭제, 설정, 오류 메시지
+
+## 12. 열린 항목
+
+- Claude API 키 발급 여부: 마일스톤 2 시작 전에 확인한다. 없으면 마일스톤 1은 그대로 진행할 수 있다.
