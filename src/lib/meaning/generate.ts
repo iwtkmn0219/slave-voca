@@ -9,7 +9,7 @@ export interface MeaningResult {
   meaningKo: string;
 }
 
-// 단어 묶음 하나를 받아 문맥 뜻을 돌려주는 모델. 실제 구현은 claude.ts, 테스트는 가짜를 쓴다.
+// 단어 묶음 하나를 받아 문맥 뜻을 돌려주는 모델. 실제 구현은 gemini.ts, 테스트는 가짜를 쓴다.
 export type MeaningModel = (batch: MeaningRequest[]) => Promise<MeaningResult[]>;
 
 export const MEANING_BATCH_SIZE = 50;

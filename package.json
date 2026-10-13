@@ -13,7 +13,7 @@
     "freq:build": "tsx scripts/build-frequency.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.133.0",
+    "@google/genai": "2.24.0",
     "better-sqlite3": "13.0.3",
     "drizzle-orm": "0.45.4",
     "next": "16.4.0",
