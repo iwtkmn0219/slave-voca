@@ -9,6 +9,12 @@ describe('arpabetToIpa', () => {
     expect(arpabetToIpa('R IH0 Z IH1 JH UW0 AH0 L')).toBe('/rɪˈzɪdʒuəl/');
   });
 
+  it('puts the stress mark before the longest allowed onset cluster', () => {
+    expect(arpabetToIpa('AE0 B S T R AE1 K T')).toBe('/æbˈstrækt/'); // abstract
+    expect(arpabetToIpa('AH0 P R OW1 CH')).toBe('/əˈproʊtʃ/'); // approach
+    expect(arpabetToIpa('K AH0 N T R OW1 L')).toBe('/kənˈtroʊl/'); // control
+  });
+
   it('uses schwa and r-colored schwa for unstressed AH and ER', () => {
     expect(arpabetToIpa('HH EH2 T ER0 AH0 JH IY1 N Y AH0 S')).toBe('/ˌhɛtɚəˈdʒinjəs/');
   });

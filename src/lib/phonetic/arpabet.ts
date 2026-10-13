@@ -61,7 +61,29 @@ function toPhone(symbol: string): Phone | null {
   return null;
 }
 
-// "R OW0 B AH1 S T" → "/roʊˈbʌst/". 강세 기호는 강세 모음 바로 앞 자음 하나 앞에 붙인다(음절 분리 없는 근사).
+// 영어 단어 첫머리에 올 수 있는 자음 묶음(IPA, 공백 구분). 자음 하나는 모두 허용한다.
+// 강세 기호는 "최대 첫소리 원칙"으로, 강세 모음 앞 자음 열 중 이 목록에 있는 가장 긴 꼬리 앞에 붙인다.
+const ONSET_CLUSTERS = new Set([
+  'p l', 'p r', 'b l', 'b r', 't r', 'd r', 'k l', 'k r', 'ɡ l', 'ɡ r', 'f l', 'f r', 'θ r', 'ʃ r',
+  's p', 's t', 's k', 's m', 's n', 's l', 's w', 't w', 'd w', 'k w', 'ɡ w',
+  'p j', 'b j', 'f j', 'v j', 'm j', 'k j', 'h j',
+  's p l', 's p r', 's t r', 's k r', 's k w', 's p j', 's k j',
+]);
+const MAX_ONSET = 3;
+
+// 강세 모음(i) 앞 자음 열에서 음절이 시작하는 위치를 찾는다.
+function onsetStart(list: Phone[], i: number): number {
+  let runStart = i;
+  while (runStart > 0 && !list[runStart - 1].vowel) runStart--;
+  if (runStart === 0) return 0; // 단어 첫머리의 자음 열은 통째로 첫소리다
+  for (let len = Math.min(MAX_ONSET, i - runStart); len >= 2; len--) {
+    const cluster = list.slice(i - len, i).map((p) => p.ipa).join(' ');
+    if (ONSET_CLUSTERS.has(cluster)) return i - len;
+  }
+  return i > runStart ? i - 1 : i;
+}
+
+// "R OW0 B AH1 S T" → "/roʊˈbʌst/", "AE0 B S T R AE1 K T" → "/æbˈstrækt/".
 // 모음이 하나뿐인 단어는 강세 기호를 생략한다. 모르는 기호가 있으면 null.
 export function arpabetToIpa(arpabet: string): string | null {
   const phones = arpabet.trim().split(/\s+/).map(toPhone);
@@ -73,7 +95,7 @@ export function arpabetToIpa(arpabet: string): string | null {
   for (let i = list.length - 1; i >= 0; i--) {
     const p = list[i];
     if (!markStress || !p.vowel || p.stress === '') continue;
-    const at = i > 0 && !list[i - 1].vowel ? i - 1 : i;
+    const at = onsetStart(list, i);
     out[at] = p.stress + out[at];
   }
   return `/${out.join('')}/`;
