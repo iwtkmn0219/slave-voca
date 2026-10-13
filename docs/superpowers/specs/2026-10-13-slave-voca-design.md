@@ -89,7 +89,7 @@ scripts/
 |---|---|---|
 | `documents` | id, title, kind(paper/presentation), status(extracting/reviewing/processing/done/error), error_message, created_at | 원본 PDF는 저장하지 않음 |
 | `candidates` | id, document_id, lemma, surface, sentence, count, is_existing, in_dictionary | 검토가 끝나면 해당 문서 행 삭제 |
-| `words` | id, lemma(unique), phonetic, FSRS 상태(due, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_review), introduced_at, created_at | 카드 1장 = 단어 1개 |
+| `words` | id, lemma(unique), phonetic, FSRS 상태(due, stability, difficulty, elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review), introduced_at, created_at | 카드 1장 = 단어 1개 |
 | `occurrences` | id, word_id, document_id, surface, sentence, meaning_ko, meaning_status(pending/done/failed), created_at | 같은 단어도 문서마다 뜻이 다를 수 있어 뜻은 여기에 저장 |
 | `known_words` | lemma(PK), created_at | 추출에서 제외 |
 | `review_logs` | id, word_id, rating, reviewed_at | 복습 기록 |
@@ -146,13 +146,13 @@ scripts/
 - `GET https://api.dictionaryapi.dev/api/v2/entries/en/{lemma}` 응답에서 첫 번째로 비어 있지 않은 `phonetic` 또는 `phonetics[].text`를 쓴다.
 - 404나 오류가 나면 아래 CMUdict 보조로 넘어간다. 재시도하지 않는다.
 - 동시 요청은 5개, 요청당 5초 제한. 연속 5번 장애(시간 초과·네트워크 오류·5xx·**429**)가 나면 남은 단어는 API를 건너뛰고 CMUdict만 쓴다. 404는 장애로 세지 않는다. (M2에서는 429를 404처럼 다뤄 차단기에 세지 않았다. M3에서 장애로 바꾼다.)
-- **CMUdict 보조 (`lib/phonetic/cmudict.ts`, `data/cmudict-ipa.json`):** API에서 발음기호를 얻지 못한 단어는 CMU Pronouncing Dictionary(약 13만 5천 단어, BSD 2-clause, 미국식 발음)에서 찾는다. 원형과 표면형을 순서대로 찾고, 여러 발음이 있으면 첫 번째를 쓴다. ARPAbet 표기를 IPA로 바꿔 `/.../` 형태로 저장한다. 강세 기호(ˈ, ˌ)는 강세 모음 바로 앞 자음 하나 앞에 붙이는 근사 규칙을 쓴다(음절 분리는 하지 않음). 그래도 없으면 `phonetic=null`.
-- CMUdict 데이터는 빌드 스크립트(`scripts/build-cmudict.ts`)가 원본을 내려받아, 알파벳 소문자 단어만 남긴 IPA 표로 만들어 커밋한다. 저작권 고지는 `data/cmudict-LICENSE`로 함께 둔다.
+- **CMUdict 보조 (`lib/phonetic/cmudict.ts`, `lib/phonetic/arpabet.ts`, `data/cmudict.txt`):** API에서 발음기호를 얻지 못한 단어는 CMU Pronouncing Dictionary(BSD 2-clause, 미국식 발음)에서 원형으로 찾는다. 여러 발음이 있으면 첫 번째를 쓴다. ARPAbet 표기를 IPA로 바꿔 `/.../` 형태로 저장한다. 강세 기호(ˈ, ˌ)는 강세 모음 바로 앞 자음 하나 앞에 붙이는 근사 규칙을 쓴다(음절 분리는 하지 않음). 그래도 없으면 `phonetic=null`.
+- CMUdict 데이터는 빌드 스크립트(`scripts/build-cmudict.ts`)가 고정 커밋의 원본에서 알파벳 소문자 단어의 첫 발음만 남긴 ARPAbet 목록(`data/cmudict.txt`, 약 11만 7천 단어, 3MB)으로 만들어 커밋한다. IPA 변환은 조회할 때 한다. 파일은 번들에 넣지 않고 서버에서 처음 쓸 때 한 번 읽는다. 저작권 고지는 `data/cmudict-LICENSE`로 함께 둔다.
 - API와 CMUdict는 서로 다른 출처라 표기가 조금 다를 수 있다(API는 영국식이 섞임). 학습용으로는 허용한다.
 
 ### 8.6 SRS (`lib/srs/scheduler.ts`)
 
-- `ts-fsrs` 기본 파라미터를 쓴다. 응답은 모름→Again, 애매→Hard, 앎→Good에 대응한다.
+- `ts-fsrs`(5.4.2 고정) 기본 파라미터를 쓰되, 퍼즈(복습일 무작위 흔들기)는 끈다(`enable_fuzz: false`). 같은 응답이면 같은 일정이 나와 테스트와 예측이 쉽다. 응답은 모름→Again, 애매→Hard, 앎→Good에 대응한다.
 - **오늘의 큐:** (1) `state != New`이고 `due <= 지금`인 카드, due 오름차순 + (2) 새 카드 중 `created_at` 오름차순으로 `daily_new_limit - 오늘 처음 본 새 카드 수`장
 - 새 카드를 처음 응답하면 `introduced_at`을 기록한다. "오늘"은 로컬 자정을 기준으로 한다.
 - 큐는 복습 화면을 열 때 계산하고, 응답할 때마다 서버에 저장한다. Again을 받은 카드는 같은 세션 끝에 다시 보여준다.
@@ -208,5 +208,6 @@ scripts/
 - 2026-10-13: AWL 예외를 빈도 순위 2,001 이상으로 한정(M2 프로토타입에서 상위 2,000위 안의 AWL 단어가 오탐을 늘리는 것을 확인)
 - 2026-10-13: M2 리뷰 반영. 8.1 하이픈 판정에 WordNet 사전 추가, AWL 절 번호를 8.7로 바로잡음(8.6 SRS와 중복), AWL 미국식 철자 추가, AWL 범위의 한계 명시
 - 2026-10-13: M2 완료 반영. 8.5에 CMUdict 보조와 429 장애 처리 추가(사전 API가 하루 종일 응답하지 않아 카드 203개 중 1개만 발음기호가 채워짐), 마일스톤 3·4 범위에 M2 리뷰 항목 배정
+- 2026-10-13: M3 프로토타입 반영. CMUdict는 ARPAbet 목록으로 저장하고 조회 시 IPA 변환, 원형으로만 조회. FSRS 퍼즈 끔, `learning_steps` 컬럼 추가
 - 2026-10-13: 문맥 뜻 모델을 Claude Haiku 5.5에서 Gemini 2.5 Flash-Lite로 교체(사용자 결정: 배포 시 비용·무료 등급 고려). 8.4, 2장, 6장, 9장, 10장, 12장 수정
 - 2026-10-13: 뜻 모델을 Gemini 3.5 Flash-Lite로 확정(2.5는 새 사용자 접근 제한, Developer·CodeReviewer가 발견). 사고 설정을 `thinkingLevel: MINIMAL`로 변경, 가격 갱신
