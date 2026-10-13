@@ -45,4 +45,14 @@ describe('createPhoneticLookup', () => {
     expect(called).toHaveLength(10);
     expect(results[4]).toBe('/x/');
   });
+
+  it('counts 429 rate limits as failures', async () => {
+    let calls = 0;
+    const limited: FetchLike = async () => {
+      calls++;
+      return { ok: false, status: 429, json: async () => ({}) };
+    };
+    await lookupAll(createPhoneticLookup(limited), 8);
+    expect(calls).toBe(5);
+  });
 });

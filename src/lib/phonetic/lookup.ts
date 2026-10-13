@@ -8,7 +8,7 @@ export type FetchLike = (
   init?: { signal?: AbortSignal },
 ) => Promise<{ ok: boolean; status?: number; json(): Promise<unknown> }>;
 
-// found: 발음기호 있음, missing: 사전에 없거나 발음기호가 없음(API는 정상), failed: 시간 초과·네트워크·5xx
+// found: 발음기호 있음, missing: 사전에 없거나 발음기호가 없음(API는 정상), failed: 시간 초과·네트워크·5xx·429
 type LookupOutcome =
   | { kind: 'found'; phonetic: string }
   | { kind: 'missing' }
@@ -33,12 +33,16 @@ function pickPhonetic(data: unknown): string | null {
   return null;
 }
 
+// 요청 한도 초과(429)와 5xx는 장애다. 404 같은 나머지 4xx는 "사전에 없음"으로 본다.
+const isOutage = (status: number | undefined) =>
+  status === undefined || status === 429 || status >= 500;
+
 async function fetchPhonetic(word: string, fetchFn: FetchLike): Promise<LookupOutcome> {
   try {
     const res = await fetchFn(ENDPOINT + encodeURIComponent(word), {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (!res.ok) return res.status !== undefined && res.status < 500 ? { kind: 'missing' } : { kind: 'failed' };
+    if (!res.ok) return isOutage(res.status) ? { kind: 'failed' } : { kind: 'missing' };
     const phonetic = pickPhonetic(await res.json());
     return phonetic ? { kind: 'found', phonetic } : { kind: 'missing' };
   } catch {

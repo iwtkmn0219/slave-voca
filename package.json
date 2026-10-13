@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "freq:build": "tsx scripts/build-frequency.ts"
+    "freq:build": "tsx scripts/build-frequency.ts",
+    "cmudict:build": "tsx scripts/build-cmudict.ts"
   },
   "dependencies": {
     "@google/genai": "2.24.0",
