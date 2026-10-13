@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cleanText, NoTextError, parsePdf, splitSentences } from '@/lib/pdf/parse';
+import { isRealWord } from '@/lib/extract/dictionary';
+import { isFrequentWord } from '@/lib/extract/frequency';
 import { makePdf } from '../../helpers/make-pdf';
 
 // 페이지 밖으로 나간 글자는 추출되지 않으므로 줄을 짧게 유지한다.
@@ -55,6 +57,14 @@ describe('cleanText', () => {
       'the international case',
     );
     expect(cleanText('a hetero-\ngeneous set', { isKnownWord })).toBe('a heterogeneous set');
+  });
+
+  it('joins a rare real word split at a line end even when it is not frequent', () => {
+    const opts = { isKnownWord: isFrequentWord, isRealWord };
+    expect(cleanText('shift in-\nvariance holds', opts)).toBe('shift invariance holds');
+    expect(cleanText('these under-\npin it', opts)).toBe('these underpin it');
+    expect(cleanText('they out-\nperform it', opts)).toBe('they outperform it');
+    expect(cleanText('careful fine-\ntuning helps', opts)).toBe('careful fine-tuning helps');
   });
 
   it('removes email addresses and URLs', () => {

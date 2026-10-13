@@ -1,5 +1,5 @@
 import { isAcademic } from '@/lib/extract/academic';
-import { inDictionary } from '@/lib/extract/dictionary';
+import { inDictionary, isRealWord } from '@/lib/extract/dictionary';
 import { extractCandidates } from '@/lib/extract/extract';
 import { isFrequentWord, rankOf } from '@/lib/extract/frequency';
 import { NoTextError, parsePdf } from '@/lib/pdf/parse';
@@ -54,7 +54,7 @@ export async function ingestPdf(db: Db, input: IngestInput): Promise<IngestResul
   const doc = createDocument(db, { title, kind: input.kind });
 
   try {
-    const sentences = await parsePdf(input.bytes, { isKnownWord: isFrequentWord });
+    const sentences = await parsePdf(input.bytes, { isKnownWord: isFrequentWord, isRealWord });
     const settings = getSettings(db);
     const found = extractCandidates(sentences, {
       excludeTopN: settings.excludeTopN,

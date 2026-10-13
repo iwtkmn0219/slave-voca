@@ -48,6 +48,8 @@ describe('ingestPdf', () => {
         'Hence the conv layers need careful fine-',
         'tuning on heterogeneous data.',
         'Contact avaswani@google.com for the code.',
+        'The shift in-',
+        'variance of the estimator holds.',
       ],
     ]);
     const result = await ingestPdf(db, input(pdf));
@@ -57,6 +59,7 @@ describe('ingestPdf', () => {
     expect(byLemma.get('heterogeneous')?.inDictionary).toBe(true);
     expect(byLemma.has('finetuning')).toBe(false);
     expect(byLemma.has('avaswani')).toBe(false);
+    expect(byLemma.has('invariance')).toBe(true); // 드문 단어는 줄 끝에서 잘려도 살아남는다
   });
 
   it('accepts a PDF whose header follows a few junk bytes', async () => {

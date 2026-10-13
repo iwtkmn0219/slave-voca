@@ -17,16 +17,19 @@ const EMAIL = /\S+@\S+/g;
 export interface CleanOptions {
   // 빈도표에 있는 단어인지. 주면 줄 끝에서 잘린 합성어(fine-\ntuning)의 하이픈을 남긴다.
   isKnownWord?: (word: string) => boolean;
+  // 붙인 단어가 실제 단어인지(빈도표 또는 사전). 없으면 isKnownWord로 판정한다.
+  // 드문 단어(in-\nvariance)를 합성어로 오인해 잃지 않으려고 조각 판정과 따로 둔다.
+  isRealWord?: (word: string) => boolean;
 }
 
-function restoreHyphen(left: string, right: string, isKnownWord?: (w: string) => boolean) {
+function restoreHyphen(left: string, right: string, options: CleanOptions) {
   const joined = left + right;
+  const { isKnownWord } = options;
+  if (isKnownWord === undefined) return joined;
+  const isRealWord = options.isRealWord ?? isKnownWord;
   const lower = (w: string) => w.toLowerCase();
   const keepHyphen =
-    isKnownWord !== undefined &&
-    !isKnownWord(lower(joined)) &&
-    isKnownWord(lower(left)) &&
-    isKnownWord(lower(right));
+    !isRealWord(lower(joined)) && isKnownWord(lower(left)) && isKnownWord(lower(right));
   return keepHyphen ? `${left}-${right}` : joined;
 }
 
@@ -34,7 +37,7 @@ function restoreHyphen(left: string, right: string, isKnownWord?: (w: string) =>
 export function cleanText(raw: string, options: CleanOptions = {}): string {
   let text = raw.normalize('NFKC');
   text = text.replace(LINE_END_HYPHEN, (_, left: string, right: string) =>
-    restoreHyphen(left, right, options.isKnownWord),
+    restoreHyphen(left, right, options),
   );
   text = text.replace(URL, ' ').replace(EMAIL, ' ');
   const heading = [...text.matchAll(REFERENCES_HEADING)].at(-1);
