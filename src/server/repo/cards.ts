@@ -38,15 +38,17 @@ export function saveReviewSelection(
     const saved: SavedCards = { occurrenceIds: [], wordIds: [] };
 
     for (const c of list) {
+      // candidates.isExisting은 추출 시점 값이라, 그 뒤 다른 문서에서 카드가 됐을 수 있다. 지금의 words를 본다.
+      const existing = tx.select().from(words).where(eq(words.lemma, c.lemma)).get();
       if (!selected.has(c.id)) {
-        if (!c.isExisting) {
+        if (!existing) {
           tx.insert(knownWords).values({ lemma: c.lemma }).onConflictDoNothing().run();
         }
         continue;
       }
-      const word =
-        tx.select().from(words).where(eq(words.lemma, c.lemma)).get() ??
-        tx.insert(words).values({ lemma: c.lemma }).returning().get();
+      // 선택이 이긴다: 다른 문서에서 아는 단어로 등록했더라도 이번에 고르면 카드로 만든다.
+      tx.delete(knownWords).where(eq(knownWords.lemma, c.lemma)).run();
+      const word = existing ?? tx.insert(words).values({ lemma: c.lemma }).returning().get();
       const occurrence = tx
         .insert(occurrences)
         .values({ wordId: word.id, documentId, surface: c.surface, sentence: c.sentence })

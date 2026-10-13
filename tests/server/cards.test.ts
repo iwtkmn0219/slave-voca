@@ -58,6 +58,25 @@ describe('saveReviewSelection', () => {
     expect(db.select().from(occurrences).all()).toHaveLength(1);
   });
 
+  it('does not mark a word as known when another document carded it after extraction', () => {
+    // A와 B가 둘 다 검토 대기 중일 때 A에서 저장하면, B의 isExisting은 여전히 false다.
+    const a = reviewingDocument([candidate('invariance')]);
+    const b = reviewingDocument([candidate('invariance')]);
+    saveReviewSelection(db, a.doc.id, [a.ids.get('invariance')!]);
+    saveReviewSelection(db, b.doc.id, []);
+    expect(db.select().from(words).all().map((w) => w.lemma)).toEqual(['invariance']);
+    expect(db.select().from(knownWords).all()).toEqual([]);
+  });
+
+  it('lets a selection win over a known word registered by another document', () => {
+    const a = reviewingDocument([candidate('invariance')]);
+    const b = reviewingDocument([candidate('invariance')]);
+    saveReviewSelection(db, a.doc.id, []);
+    saveReviewSelection(db, b.doc.id, [b.ids.get('invariance')!]);
+    expect(db.select().from(words).all().map((w) => w.lemma)).toEqual(['invariance']);
+    expect(db.select().from(knownWords).all()).toEqual([]);
+  });
+
   it('does not mark an existing card as known when it is unselected', () => {
     db.insert(words).values({ lemma: 'robust' }).run();
     const { doc } = reviewingDocument([candidate('robust', true)]);
