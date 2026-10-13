@@ -155,7 +155,7 @@ scripts/
 - 출처: Coxhead의 Academic Word List(AWL, 2000). 대표어(headword) 570개를 원형화해 저장한다.
 - 용도: 8.2의 5번 예외. 이 목록에 있고 빈도 순위가 2,001 이상인 원형은 `exclude_top_n` 안이어도 후보로 남긴다. 2,001~5,000위 구간에 166개가 있다(achieve, adequate, assume, hence, whereas 등).
 - 파일: 공식 대표어 문서(`Headwords-of-the-Academic-Word-List.docx`, Victoria University of Wellington)에서 1회 추출한 570개 단어의 JSON 배열. 로드할 때 원형화한다.
-- 철자: 목록은 영국식(analyse, maximise, utilise)이다. 로드할 때 `-ise`/`-yse`로 끝나는 대표어에 미국식 `-ize`/`-yze` 형태를 함께 넣는다.
+- 철자: 목록은 영국식이다. 실제 영국식 철자인 대표어 4개(analyse, maximise, minimise, utilise)에만 미국식 형태(analyze, maximize, minimize, utilize)를 함께 넣는다. comprise, likewise, precise, revise처럼 -ise로 끝나도 철자 변형이 없는 단어에는 적용하지 않는다.
 - 한계: 대표어만 쓰므로 M1에서 꼽은 학술 핵심어 23개 중 약 13개만 살아난다(respectively, numerous, novel, substantial, adopt 등은 AWL 대표어가 아님). 나머지는 사용자가 N을 조정하거나 나중에 단어군(word family) 목록을 도입할 때 다룬다.
 - 라이선스: 명시된 이용 조건이 없다. **로컬 개인용으로만 쓴다.** 저장소를 공개하거나 앱을 배포하기 전에 사용자와 다시 검토한다. (같은 목적의 NAWL은 CC BY-SA 4.0이지만, 일상 고빈도어를 제외한 목록이라 목표 단어 10개 중 하나도 없어서 쓰지 않는다.)
 
