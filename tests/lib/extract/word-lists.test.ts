@@ -9,6 +9,11 @@ describe('isAcademic', () => {
     expect(isAcademic('analysis')).toBe(false); // 대표어는 analyse
     expect(isAcademic('banana')).toBe(false);
   });
+
+  it('also accepts American spellings of -ise and -yse headwords', () => {
+    expect(isAcademic('analyze')).toBe(true);
+    expect(isAcademic('maximize')).toBe(true);
+  });
 });
 
 describe('inDictionary', () => {
