@@ -6,13 +6,15 @@ export class NoTextError extends Error {
 }
 
 const MIN_TEXT_CHARS = 200;
-const REFERENCES_HEADING = /^[ \t]*(references|bibliography|참고문헌)[ \t]*$/im;
+// 대소문자를 구분한다: 본문의 소문자 "references"가 줄 바꿈으로 혼자 남아도 제목으로 보지 않는다.
+const REFERENCES_HEADING =
+  /^[ \t]*(References|REFERENCES|Bibliography|BIBLIOGRAPHY|참고문헌)[ \t]*$/gm;
 
-// 합자(ﬁ 등) 펼치기 → 줄 끝 하이픈 복원 → 참고문헌 이후 제거 → 공백 정리
+// 합자(ﬁ 등) 펼치기 → 줄 끝 하이픈 복원 → 마지막 참고문헌 제목 이후 제거 → 공백 정리
 export function cleanText(raw: string): string {
   let text = raw.normalize('NFKC');
   text = text.replace(/([A-Za-z])-\n([a-z])/g, '$1$2');
-  const heading = REFERENCES_HEADING.exec(text);
+  const heading = [...text.matchAll(REFERENCES_HEADING)].at(-1);
   if (heading) text = text.slice(0, heading.index);
   return text.replace(/\s+/g, ' ').trim();
 }

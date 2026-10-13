@@ -28,6 +28,18 @@ describe('cleanText', () => {
     expect(cleanText('Body.\n  BIBLIOGRAPHY \nX.')).toBe('Body.');
   });
 
+  it('keeps text when a lowercase "references" wraps onto its own line', () => {
+    expect(cleanText('Earlier work, see the\nreferences\nlisted below.')).toBe(
+      'Earlier work, see the references listed below.',
+    );
+  });
+
+  it('cuts at the last References heading, not an earlier one', () => {
+    expect(cleanText('Intro.\nReferences\nMore body.\nReferences\nSmith, 2020.')).toBe(
+      'Intro. References More body.',
+    );
+  });
+
   it('keeps text when "references" appears inside a sentence', () => {
     expect(cleanText('Prior references\nsupport this claim.')).toBe(
       'Prior references support this claim.',
