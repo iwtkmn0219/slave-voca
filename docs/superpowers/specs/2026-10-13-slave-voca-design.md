@@ -24,7 +24,7 @@
 | 스택 | Next.js(App Router, TypeScript) 하나로 화면과 서버 |
 | DB | SQLite (Drizzle ORM + better-sqlite3) |
 | 단어 추출 | 빈도 기준. 흔한 단어 상위 5,000개(원형 기준) 제외, 설정에서 변경 가능 |
-| 문맥 뜻 | Claude Haiku 5.5 (`claude-haiku-5-5`), 문서 단위로 묶어 요청 |
+| 문맥 뜻 | Gemini 2.5 Flash-Lite (`gemini-2.5-flash-lite`), 문서 단위로 묶어 요청 (2026-10-13 Claude Haiku 5.5에서 교체) |
 | 발음기호 | Free Dictionary API (`api.dictionaryapi.dev`) |
 | 발음 듣기 | 브라우저 내장 Web Speech API (`speechSynthesis`, en-US) |
 | 암기 방식 | FSRS 간격 반복 (`ts-fsrs` 라이브러리) |
@@ -66,7 +66,8 @@ src/
     pdf/parse.ts          PDF → 정제된 문장 배열
     extract/extract.ts    문장 배열 → 후보 단어 목록
     extract/frequency.ts  빈도표 로드, 원형의 순위 조회
-    meaning/generate.ts   (단어, 문장) 묶음 → 한국어 뜻 (Claude API)
+    meaning/generate.ts   (단어, 문장) 묶음 → 한국어 뜻 (모델 무관)
+    meaning/gemini.ts     Gemini API 구현 (교체 지점)
     phonetic/lookup.ts    단어 → 발음기호 (Free Dictionary API)
     srs/scheduler.ts      응답 → 다음 복습 상태, 오늘의 복습 큐
   server/
@@ -129,13 +130,15 @@ scripts/
 
 ### 8.4 문맥 뜻 생성 (`lib/meaning/generate.ts`)
 
-- `@anthropic-ai/sdk`, 모델 `claude-haiku-5-5`, `output_config.effort: "low"`
+- `@google/genai`(2.24.0 고정), 모델 `gemini-2.5-flash-lite`, `thinkingConfig.thinkingBudget: 0`(사고 토큰 끔)
+- 가격(공식, 2026-10-13 확인): 유료 입력 $0.10 / 출력 $0.40(100만 토큰당). 무료 등급도 있지만 **무료 등급 입력은 Google이 제품 개선에 사용한다.** 공개되지 않은 자료를 다룰 때는 유료 등급 키를 쓴다.
+- 모델 교체 지점: `MeaningModel` 함수 형태만 지키면 다른 모델로 바꿀 수 있다. 화면·DB·`generate.ts`는 바뀌지 않는다.
 - 한 요청에 최대 50개의 (id, 단어, 원문 문장)을 담는다. 100개면 2번 요청한다.
-- 구조화 출력(`output_config.format`의 JSON 스키마)으로 `[{ id, meaning_ko }]`를 받는다.
+- 구조화 출력(`responseMimeType: "application/json"` + `responseJsonSchema`)으로 `{ meanings: [{ id, meaning_ko }] }`를 받고, zod로 한 번 더 검증한다. 응답이 비었거나(차단 등) 형식이 틀리면 그 묶음은 실패로 처리한다.
 - 시스템 지시: "각 단어가 주어진 문장에서 쓰인 의미를 한국어로 짧게(2~15자, 품사에 맞게) 답하라. 사전의 첫 뜻이 아니라 이 문장 속 의미를 쓴다."
-- API 키는 환경변수 `ANTHROPIC_API_KEY`(`.env.local`)에서 읽고, 서버에서만 사용한다.
+- API 키는 환경변수 `GEMINI_API_KEY`(`.env.local`)에서 읽고, 서버에서만 사용한다.
 - 응답에 빠진 id나 요청 실패는 해당 용례를 `meaning_status=failed`로 둔다. 문서 단어 목록에서 재시도할 수 있다.
-- SDK 사용법은 구현 시 claude-api 스킬의 TypeScript 문서를 따른다.
+- SDK 사용법은 `@google/genai` 공식 문서(googleapis.github.io/js-genai)를 따른다.
 
 ### 8.5 발음기호 (`lib/phonetic/lookup.ts`)
 
@@ -169,8 +172,8 @@ scripts/
 | PDF가 아님, 50MB 초과 | 업로드 거부, 메시지 표시. 50MB 초과는 폼에서 제출 전에 막는다. PDF 판별은 앞 1,024바이트 안에 `%PDF-`가 있으면 인정한다(PDF 규격이 허용하는 앞쪽 쓰레기 바이트 대응) |
 | 텍스트 없음(스캔 PDF) | 문서 `status=error`, 사유 표시 |
 | 후보 0개 | 검토 화면에 "외울 단어가 없습니다" 표시, 문서는 `done` |
-| `ANTHROPIC_API_KEY` 없음 | 카드는 저장하고 뜻은 `failed`, 화면에 키 설정 안내 |
-| Claude API 실패, 응답 누락 | 해당 용례 `failed`, 재시도 버튼 |
+| `GEMINI_API_KEY` 없음 | 카드는 저장하고 뜻은 `failed`, 화면에 키 설정 안내 |
+| Gemini API 실패, 응답 누락·차단 | 해당 용례 `failed`, 재시도 버튼 |
 | 사전 API 실패 | 발음기호만 비움, 발음 듣기는 유지 |
 | 브라우저 TTS 없음 | 발음 버튼 숨김 |
 
@@ -183,7 +186,7 @@ scripts/
   - `meaning/generate`: SDK를 목으로 대체해 묶음 분할, 누락 id → failed, 오류 → failed
   - `repo`: 메모리 SQLite로 같은 단어 재저장 시 용례만 추가, 카드 삭제 연쇄
 - **수동 확인:** 실제 논문 PDF 3편(1단 1편, 2단 2편)으로 추출 품질과 처리 시간 5분 이내를 확인한다.
-- 실제 Claude API 호출은 수동 확인에서만 한다.
+- 실제 Gemini API 호출은 수동 확인에서만 한다.
 
 ## 11. 마일스톤
 
@@ -194,7 +197,7 @@ scripts/
 
 ## 12. 열린 항목
 
-- Claude API 키 발급 여부: 아직 없다(2026-10-13 확인). 키가 없어도 마일스톤 2의 추출 개선, 저장, 발음기호는 진행할 수 있다. 뜻 생성은 테스트에서 SDK를 목으로 대체하고, 실제 호출 확인만 키를 받은 뒤 한다.
+- Gemini API 키 발급 여부: 아직 없다(2026-10-13 확인). Google AI Studio에서 무료로 발급할 수 있다. 키가 없어도 마일스톤 2의 추출 개선, 저장, 발음기호는 진행할 수 있다. 뜻 생성은 테스트에서 SDK를 목으로 대체하고, 실제 호출 확인만 키를 받은 뒤 한다.
 - AWL 라이선스: 저장소 공개나 앱 배포 전에 다시 검토한다(8.7).
 
 ## 13. 변경 이력
@@ -204,3 +207,4 @@ scripts/
 - 2026-10-13: AWL 예외를 빈도 순위 2,001 이상으로 한정(M2 프로토타입에서 상위 2,000위 안의 AWL 단어가 오탐을 늘리는 것을 확인)
 - 2026-10-13: M2 리뷰 반영. 8.1 하이픈 판정에 WordNet 사전 추가, AWL 절 번호를 8.7로 바로잡음(8.6 SRS와 중복), AWL 미국식 철자 추가, AWL 범위의 한계 명시
 - 2026-10-13: M2 완료 반영. 8.5에 CMUdict 보조와 429 장애 처리 추가(사전 API가 하루 종일 응답하지 않아 카드 203개 중 1개만 발음기호가 채워짐), 마일스톤 3·4 범위에 M2 리뷰 항목 배정
+- 2026-10-13: 문맥 뜻 모델을 Claude Haiku 5.5에서 Gemini 2.5 Flash-Lite로 교체(사용자 결정: 배포 시 비용·무료 등급 고려). 8.4, 2장, 6장, 9장, 10장, 12장 수정
