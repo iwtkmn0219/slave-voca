@@ -41,6 +41,36 @@ describe('ingestPdf', () => {
     expect(lemmas).not.toContain('paper');
   });
 
+  it('applies the real word lists: academic rescue, dictionary flag, line-end compounds', async () => {
+    const pdf = makePdf([
+      [
+        ...PAPER,
+        'Hence the conv layers need careful fine-',
+        'tuning on heterogeneous data.',
+        'Contact avaswani@google.com for the code.',
+        'The shift in-',
+        'variance of the estimator holds.',
+      ],
+    ]);
+    const result = await ingestPdf(db, input(pdf));
+    const byLemma = new Map(listCandidates(db, result.documentId).map((c) => [c.lemma, c]));
+    expect(byLemma.has('hence')).toBe(true); // 순위 4567, AWL 대표어
+    expect(byLemma.get('conv')?.inDictionary).toBe(false);
+    expect(byLemma.get('heterogeneous')?.inDictionary).toBe(true);
+    expect(byLemma.has('finetuning')).toBe(false);
+    expect(byLemma.has('avaswani')).toBe(false);
+    expect(byLemma.has('invariance')).toBe(true); // 드문 단어는 줄 끝에서 잘려도 살아남는다
+  });
+
+  it('accepts a PDF whose header follows a few junk bytes', async () => {
+    const pdf = makePdf([PAPER]);
+    const withJunk = new Uint8Array(pdf.length + 3);
+    withJunk.set([0xef, 0xbb, 0xbf]);
+    withJunk.set(pdf, 3);
+    const result = await ingestPdf(db, input(withJunk));
+    expect(result.status).toBe('reviewing');
+  });
+
   it('uses the file name when the title is blank', async () => {
     const result = await ingestPdf(db, input(makePdf([PAPER]), '   '));
     expect(getDocument(db, result.documentId)?.title).toBe('attention');

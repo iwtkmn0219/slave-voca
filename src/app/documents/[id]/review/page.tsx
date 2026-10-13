@@ -31,6 +31,7 @@ async function Review({ params }: { params: Promise<{ id: string }> }) {
         <p>외울 단어가 없습니다.</p>
       ) : (
         <CandidateTable
+          documentId={doc.id}
           candidates={candidates.map((c) => ({
             id: c.id,
             lemma: c.lemma,
@@ -38,6 +39,7 @@ async function Review({ params }: { params: Promise<{ id: string }> }) {
             sentence: c.sentence,
             count: c.count,
             isExisting: c.isExisting,
+            inDictionary: c.inDictionary,
           }))}
         />
       )}

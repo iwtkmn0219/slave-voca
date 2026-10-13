@@ -21,6 +21,7 @@ const candidate = (lemma: string, count: number) => ({
   sentence: `A ${lemma} here.`,
   count,
   isExisting: false,
+  inDictionary: true,
 });
 
 let db: Db;

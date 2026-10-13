@@ -7,13 +7,39 @@ export class NoTextError extends Error {
 
 const MIN_TEXT_CHARS = 200;
 // 대소문자를 구분한다: 본문의 소문자 "references"가 줄 바꿈으로 혼자 남아도 제목으로 보지 않는다.
+// 앞에 장 번호("6 References", "7. REFERENCES")가 붙어도 제목으로 본다.
 const REFERENCES_HEADING =
-  /^[ \t]*(References|REFERENCES|Bibliography|BIBLIOGRAPHY|참고문헌)[ \t]*$/gm;
+  /^[ \t]*(?:\d+(?:\.\d+)*\.?[ \t]+)?(References|REFERENCES|Bibliography|BIBLIOGRAPHY|참고문헌)[ \t]*$/gm;
+const LINE_END_HYPHEN = /([A-Za-z]+)-\n([a-z]+)/g;
+const URL = /https?:\/\/\S+/g;
+const EMAIL = /\S+@\S+/g;
 
-// 합자(ﬁ 등) 펼치기 → 줄 끝 하이픈 복원 → 마지막 참고문헌 제목 이후 제거 → 공백 정리
-export function cleanText(raw: string): string {
+export interface CleanOptions {
+  // 빈도표에 있는 단어인지. 주면 줄 끝에서 잘린 합성어(fine-\ntuning)의 하이픈을 남긴다.
+  isKnownWord?: (word: string) => boolean;
+  // 붙인 단어가 실제 단어인지(빈도표 또는 사전). 없으면 isKnownWord로 판정한다.
+  // 드문 단어(in-\nvariance)를 합성어로 오인해 잃지 않으려고 조각 판정과 따로 둔다.
+  isRealWord?: (word: string) => boolean;
+}
+
+function restoreHyphen(left: string, right: string, options: CleanOptions) {
+  const joined = left + right;
+  const { isKnownWord } = options;
+  if (isKnownWord === undefined) return joined;
+  const isRealWord = options.isRealWord ?? isKnownWord;
+  const lower = (w: string) => w.toLowerCase();
+  const keepHyphen =
+    !isRealWord(lower(joined)) && isKnownWord(lower(left)) && isKnownWord(lower(right));
+  return keepHyphen ? `${left}-${right}` : joined;
+}
+
+// 합자(ﬁ 등) 펼치기 → 줄 끝 하이픈 복원 → 이메일·URL 제거 → 마지막 참고문헌 제목 이후 제거 → 공백 정리
+export function cleanText(raw: string, options: CleanOptions = {}): string {
   let text = raw.normalize('NFKC');
-  text = text.replace(/([A-Za-z])-\n([a-z])/g, '$1$2');
+  text = text.replace(LINE_END_HYPHEN, (_, left: string, right: string) =>
+    restoreHyphen(left, right, options),
+  );
+  text = text.replace(URL, ' ').replace(EMAIL, ' ');
   const heading = [...text.matchAll(REFERENCES_HEADING)].at(-1);
   if (heading) text = text.slice(0, heading.index);
   return text.replace(/\s+/g, ' ').trim();
@@ -48,8 +74,8 @@ export async function extractPdfText(bytes: Uint8Array): Promise<string> {
   }
 }
 
-export async function parsePdf(bytes: Uint8Array): Promise<string[]> {
-  const text = cleanText(await extractPdfText(bytes));
+export async function parsePdf(bytes: Uint8Array, options: CleanOptions = {}): Promise<string[]> {
+  const text = cleanText(await extractPdfText(bytes), options);
   if (text.replace(/\s/g, '').length < MIN_TEXT_CHARS) throw new NoTextError();
   return splitSentences(text);
 }

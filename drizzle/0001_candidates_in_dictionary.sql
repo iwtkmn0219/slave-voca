@@ -1,0 +1,1 @@
+ALTER TABLE `candidates` ADD `in_dictionary` integer DEFAULT true NOT NULL;

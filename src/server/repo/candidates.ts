@@ -3,7 +3,7 @@ import type { Candidate } from '@/lib/extract/extract';
 import type { Db } from '../db/client';
 import { candidates, type CandidateRow } from '../db/schema';
 
-// 한 행에 변수 6개라 SQLite 상한(32766) 안에 들도록 나눠 넣는다.
+// 한 행에 변수 7개라 SQLite 상한(32766) 안에 들도록 나눠 넣는다.
 const INSERT_CHUNK = 1000;
 
 export function replaceCandidates(db: Db, documentId: number, list: Candidate[]): void {

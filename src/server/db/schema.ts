@@ -30,6 +30,7 @@ export const candidates = sqliteTable('candidates', {
   sentence: text('sentence').notNull(),
   count: integer('count').notNull(),
   isExisting: integer('is_existing', { mode: 'boolean' }).notNull(),
+  inDictionary: integer('in_dictionary', { mode: 'boolean' }).notNull().default(true),
 });
 
 // 카드. 복습(FSRS) 컬럼은 마일스톤 3에서 추가한다.
@@ -37,6 +38,25 @@ export const words = sqliteTable('words', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   lemma: text('lemma').notNull().unique(),
   phonetic: text('phonetic'),
+  createdAt: createdAt(),
+});
+
+export const MEANING_STATUSES = ['pending', 'done', 'failed'] as const;
+export type MeaningStatus = (typeof MEANING_STATUSES)[number];
+
+// 용례. 같은 단어도 문서마다 문맥 뜻이 다를 수 있어 뜻은 여기에 둔다.
+export const occurrences = sqliteTable('occurrences', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  wordId: integer('word_id')
+    .notNull()
+    .references(() => words.id, { onDelete: 'cascade' }),
+  documentId: integer('document_id')
+    .notNull()
+    .references(() => documents.id, { onDelete: 'cascade' }),
+  surface: text('surface').notNull(),
+  sentence: text('sentence').notNull(),
+  meaningKo: text('meaning_ko'),
+  meaningStatus: text('meaning_status', { enum: MEANING_STATUSES }).notNull().default('pending'),
   createdAt: createdAt(),
 });
 
