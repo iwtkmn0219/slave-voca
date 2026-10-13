@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { highlight } from "@/lib/text/highlight";
+import { saveReview } from "./actions";
 
 export interface CandidateView {
   id: number;
@@ -10,10 +11,20 @@ export interface CandidateView {
   sentence: string;
   count: number;
   isExisting: boolean;
+  inDictionary: boolean;
 }
 
-export function CandidateTable({ candidates }: { candidates: CandidateView[] }) {
-  const [selected, setSelected] = useState(() => new Set(candidates.map((c) => c.id)));
+export function CandidateTable({
+  documentId,
+  candidates,
+}: {
+  documentId: number;
+  candidates: CandidateView[];
+}) {
+  // 사전에 없는 단어(약칭·기호일 가능성이 큼)는 기본으로 체크 해제한다.
+  const [selected, setSelected] = useState(
+    () => new Set(candidates.filter((c) => c.inDictionary).map((c) => c.id)),
+  );
   const allSelected = selected.size === candidates.length;
 
   const toggle = (id: number) =>
@@ -27,6 +38,14 @@ export function CandidateTable({ candidates }: { candidates: CandidateView[] }) 
   const toggleAll = () =>
     setSelected(allSelected ? new Set() : new Set(candidates.map((c) => c.id)));
 
+  const [saving, startSaving] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const save = () =>
+    startSaving(async () => {
+      const result = await saveReview(documentId, [...selected]);
+      if (result?.error) setError(result.error);
+    });
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-4 text-sm">
@@ -37,16 +56,20 @@ export function CandidateTable({ candidates }: { candidates: CandidateView[] }) 
           {candidates.length}개 중 {selected.size}개 선택 · 체크를 해제한 단어는 아는 단어로
           처리됩니다
         </span>
-        {/* 저장은 마일스톤 2에서 연결한다. */}
         <button
           type="button"
-          disabled
-          title="마일스톤 2에서 연결됩니다"
-          className="ml-auto rounded bg-black px-4 py-1 text-white opacity-50"
+          onClick={save}
+          disabled={saving}
+          className="ml-auto rounded bg-black px-4 py-1 text-white disabled:opacity-50"
         >
-          저장
+          {saving ? "뜻과 발음을 채우는 중…" : "저장"}
         </button>
       </div>
+      {error && (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b">
@@ -71,6 +94,9 @@ export function CandidateTable({ candidates }: { candidates: CandidateView[] }) 
                 {c.lemma}
                 {c.isExisting && (
                   <span className="ml-2 rounded bg-gray-200 px-1 text-xs">이미 학습 중</span>
+                )}
+                {!c.inDictionary && (
+                  <span className="ml-2 rounded bg-yellow-100 px-1 text-xs">사전에 없음</span>
                 )}
               </td>
               <td className="py-2">{c.count}</td>

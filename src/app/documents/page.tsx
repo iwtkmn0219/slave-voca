@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { getDb } from "@/server/db/client";
 import type { DocumentStatus } from "@/server/db/schema";
+import { countOccurrencesByDocument } from "@/server/repo/cards";
 import { countCandidatesByDocument } from "@/server/repo/candidates";
 import { listDocuments } from "@/server/repo/documents";
 import { UploadForm } from "./upload-form";
@@ -31,7 +32,8 @@ async function DocumentList() {
   await connection();
   const db = getDb();
   const docs = listDocuments(db);
-  const counts = countCandidatesByDocument(db);
+  const candidateCounts = countCandidatesByDocument(db);
+  const wordCounts = countOccurrencesByDocument(db);
 
   if (docs.length === 0) return <p className="text-gray-500">아직 올린 문서가 없습니다.</p>;
 
@@ -42,7 +44,7 @@ async function DocumentList() {
           <th className="py-2">제목</th>
           <th>종류</th>
           <th>상태</th>
-          <th>후보 단어</th>
+          <th>단어 수</th>
           <th>올린 날짜</th>
         </tr>
       </thead>
@@ -52,6 +54,10 @@ async function DocumentList() {
             <td className="py-2">
               {doc.status === "reviewing" ? (
                 <Link href={`/documents/${doc.id}/review`} className="underline">
+                  {doc.title}
+                </Link>
+              ) : doc.status === "done" || doc.status === "processing" ? (
+                <Link href={`/documents/${doc.id}`} className="underline">
                   {doc.title}
                 </Link>
               ) : (
@@ -65,7 +71,11 @@ async function DocumentList() {
                 <span className="block text-xs text-red-600">{doc.errorMessage}</span>
               )}
             </td>
-            <td>{counts.get(doc.id) ?? 0}</td>
+            <td>
+              {doc.status === "reviewing"
+                ? `후보 ${candidateCounts.get(doc.id) ?? 0}`
+                : (wordCounts.get(doc.id) ?? 0)}
+            </td>
             <td>{doc.createdAt.toLocaleDateString("ko-KR")}</td>
           </tr>
         ))}
