@@ -1,6 +1,7 @@
 import { extractCandidates } from '@/lib/extract/extract';
 import { rankOf } from '@/lib/extract/frequency';
 import { NoTextError, parsePdf } from '@/lib/pdf/parse';
+import { MAX_PDF_BYTES, pdfSizeError } from '@/lib/upload/limits';
 import type { Db } from '../db/client';
 import type { DocumentKind, DocumentStatus } from '../db/schema';
 import { replaceCandidates } from '../repo/candidates';
@@ -8,7 +9,7 @@ import { createDocument, updateDocumentStatus } from '../repo/documents';
 import { getSettings } from '../repo/settings';
 import { listKnownLemmas, listWordLemmas } from '../repo/vocabulary';
 
-export const MAX_PDF_BYTES = 50 * 1024 * 1024;
+export { MAX_PDF_BYTES };
 
 export class UploadError extends Error {
   constructor(message: string) {
@@ -32,8 +33,8 @@ export interface IngestResult {
 const PDF_MAGIC = '%PDF-';
 
 export function validateUpload(bytes: Uint8Array): void {
-  if (bytes.length === 0) throw new UploadError('PDF 파일을 선택하세요.');
-  if (bytes.length > MAX_PDF_BYTES) throw new UploadError('50MB 이하의 PDF만 올릴 수 있습니다.');
+  const sizeError = pdfSizeError(bytes.length);
+  if (sizeError) throw new UploadError(sizeError);
   const head = new TextDecoder().decode(bytes.subarray(0, PDF_MAGIC.length));
   if (head !== PDF_MAGIC) throw new UploadError('PDF 파일이 아닙니다.');
 }

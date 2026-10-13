@@ -1,15 +1,27 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, type FormEvent } from "react";
+import { pdfSizeError } from "@/lib/upload/limits";
 import { uploadDocument, type UploadState } from "./actions";
 
 const initialState: UploadState = { error: null };
 
 export function UploadForm() {
   const [state, formAction, pending] = useActionState(uploadDocument, initialState);
+  const [sizeError, setSizeError] = useState<string | null>(null);
+
+  // 51MB를 넘는 본문은 Next가 서버 액션 전에 거부하므로, 크기는 제출 전에 여기서 알린다.
+  const checkSize = (event: FormEvent<HTMLFormElement>) => {
+    const file = new FormData(event.currentTarget).get("file");
+    const error = file instanceof File ? pdfSizeError(file.size) : null;
+    setSizeError(error);
+    if (error) event.preventDefault();
+  };
+
+  const error = sizeError ?? state.error;
 
   return (
-    <form action={formAction} className="space-y-3 rounded border p-4">
+    <form action={formAction} onSubmit={checkSize} className="space-y-3 rounded border p-4">
       <div className="flex flex-wrap items-center gap-3">
         <input type="file" name="file" accept="application/pdf,.pdf" required />
         <select name="kind" defaultValue="paper" className="rounded border px-2 py-1">
@@ -30,9 +42,9 @@ export function UploadForm() {
           {pending ? "단어 추출 중…" : "올리기"}
         </button>
       </div>
-      {state.error && (
+      {error && (
         <p role="alert" className="text-sm text-red-600">
-          {state.error}
+          {error}
         </p>
       )}
     </form>
