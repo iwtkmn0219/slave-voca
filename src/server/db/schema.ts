@@ -1,4 +1,5 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const DOCUMENT_KINDS = ['paper', 'presentation'] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
@@ -33,12 +34,24 @@ export const candidates = sqliteTable('candidates', {
   inDictionary: integer('in_dictionary', { mode: 'boolean' }).notNull().default(true),
 });
 
-// 카드. 복습(FSRS) 컬럼은 마일스톤 3에서 추가한다.
+// 카드. FSRS 컬럼 기본값은 "아직 한 번도 보지 않은 새 카드"(state 0 = New)다.
 export const words = sqliteTable('words', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   lemma: text('lemma').notNull().unique(),
   phonetic: text('phonetic'),
   createdAt: createdAt(),
+  due: integer('due', { mode: 'timestamp_ms' }).notNull().default(sql`0`),
+  stability: real('stability').notNull().default(0),
+  difficulty: real('difficulty').notNull().default(0),
+  elapsedDays: integer('elapsed_days').notNull().default(0),
+  scheduledDays: integer('scheduled_days').notNull().default(0),
+  learningSteps: integer('learning_steps').notNull().default(0),
+  reps: integer('reps').notNull().default(0),
+  lapses: integer('lapses').notNull().default(0),
+  state: integer('state').notNull().default(0),
+  lastReview: integer('last_review', { mode: 'timestamp_ms' }),
+  // 새 카드를 처음 응답한 시각. 하루 새 카드 상한을 셀 때 쓴다.
+  introducedAt: integer('introduced_at', { mode: 'timestamp_ms' }),
 });
 
 export const MEANING_STATUSES = ['pending', 'done', 'failed'] as const;
@@ -60,6 +73,16 @@ export const occurrences = sqliteTable('occurrences', {
   createdAt: createdAt(),
 });
 
+// 복습 기록. rating은 ts-fsrs Rating 값(1 Again, 2 Hard, 3 Good).
+export const reviewLogs = sqliteTable('review_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  wordId: integer('word_id')
+    .notNull()
+    .references(() => words.id, { onDelete: 'cascade' }),
+  rating: integer('rating').notNull(),
+  reviewedAt: integer('reviewed_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
 export const knownWords = sqliteTable('known_words', {
   lemma: text('lemma').primaryKey(),
   createdAt: createdAt(),
@@ -72,3 +95,4 @@ export const settings = sqliteTable('settings', {
 
 export type DocumentRow = typeof documents.$inferSelect;
 export type CandidateRow = typeof candidates.$inferSelect;
+export type WordRow = typeof words.$inferSelect;

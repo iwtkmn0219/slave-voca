@@ -15,6 +15,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <Link href="/" className="font-semibold">
             slave-voca
           </Link>
+          <Link href="/study">복습</Link>
           <Link href="/documents">문서</Link>
         </nav>
         <div className="mx-auto w-full max-w-5xl flex-1 px-8 py-8">{children}</div>
