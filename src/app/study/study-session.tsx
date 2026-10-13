@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import type { Answer } from "@/lib/srs/scheduler";
 import { advanceQueue } from "@/lib/srs/session";
 import { highlight } from "@/lib/text/highlight";
@@ -21,6 +21,7 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
   const [answered, setAnswered] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
+  const locked = useRef(false);
 
   if (queue.length === 0) {
     return (
@@ -34,18 +35,26 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
   }
 
   const card = queue[0];
-  const answer = (choice: Answer) =>
+  const answer = (choice: Answer) => {
+    // saving(isPending)은 다음 렌더에야 버튼을 막으므로, 같은 순간의 두 번째 클릭은 ref로 즉시 막는다.
+    if (locked.current) return;
+    locked.current = true;
     startSaving(async () => {
-      const result = await answerCard(card.wordId, choice);
-      if (result.error) {
-        setError(result.error);
-        return;
+      try {
+        const result = await answerCard(card.wordId, choice);
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        setError(null);
+        setAnswered((n) => n + 1);
+        setQueue((q) => advanceQueue(q, choice));
+        setRevealed(false);
+      } finally {
+        locked.current = false; // 실패해도 다시 누를 수 있게 푼다
       }
-      setError(null);
-      setAnswered((n) => n + 1);
-      setQueue((q) => advanceQueue(q, choice));
-      setRevealed(false);
     });
+  };
 
   return (
     <div className="space-y-6">
