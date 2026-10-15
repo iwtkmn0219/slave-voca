@@ -1,6 +1,6 @@
 # M4-3 설계: 단어 추출 정확도, M4-2 작은 문제, 다크 토큰 정리
 
-- 상태: 사용자 승인(2026-10-16, "4번 정리도 하면서"). 프로토타입으로 확인했다. 계획서: `docs/superpowers/plans/2026-10-16-m4-3-cleanup.md`
+- 상태: 완료(2026-10-16, main 병합 708e0c9). 사용자 승인 후 프로토타입으로 확인했다. 계획서: `docs/superpowers/plans/2026-10-16-m4-3-cleanup.md`
 - 상위 설계서: `2026-10-13-slave-voca-design.md` 8.2(추출 규칙), 11장 M4
 
 ## 1. 단어 추출 정확도(M2 리뷰에서 넘어온 항목)
@@ -17,7 +17,8 @@
 1. **복수형은 단어마다 처리한다.** 원형 처리기가 형태를 바꾸지 못한 단어가 다음을 모두 만족하면 끝의 s를 뗀 단수형을 원형으로 쓴다. 문서 단위 합치기(`mergePlurals`)는 없앤다.
    - s로 끝나고, -ss·-us·-is로 끝나지 않는다(glass, softplus, axis는 그대로).
    - 그 형태가 사전(WordNet)에 없다(lens, bias, series, analysis는 그대로).
-   - s를 뗀 길이가 3자 이상이다.
+   - 단수형 후보: -ies는 y로(nonlinearities → nonlinearity), x·ch·sh·z + es는 es를 떼고(softmaxes → softmax), 그 밖은 s를 뗀다. 사전이 아는 후보를 먼저 쓴다(databases → database, caches → cache). Codex 리뷰에서 추가했다.
+   - 단수형 길이가 3자 이상이다.
    - 그 형태는 빈도표에 있는데 s를 뗀 형태는 빈도표에 없는 경우가 아니다(whereas는 그대로. wherea는 단어가 아니고, 학술어 예외도 whereas로 받아야 한다).
 2. 단수형으로 바꾼 뒤에 원래 규칙(빈도 순위, 아는 단어, 학술어 예외)을 적용한다. 그래서 단수형이 아는 단어거나 흔한 단어면 복수형도 함께 빠진다(ours → our는 흔한 단어라 빠진다).
 3. **발음 구별 기호:** 문장을 NFC로 모은 뒤(조합형 i + ̈ 를 한 글자로), 토큰에서 기호를 떼어(NFD 후 결합 문자 제거) 원형을 만든다. 떼어도 ASCII가 아니면(Łukasz) 지금처럼 버린다. 표면형(surface)은 문장에 적힌 그대로(naïve) 둔다.
@@ -26,6 +27,7 @@
 ### 1.3 영향
 
 - 이미 저장된 후보와 카드는 바뀌지 않는다. 새로 올리는 문서부터 적용된다.
+- 표면형은 그 원형으로 처음 나온 형태다. 예전에는 합치면서 단수형으로 덮었으므로 subproblems·datasets처럼 복수형이 표면형이 될 수 있다. 저장되는 문장에 그 형태가 있으므로 형광펜은 맞다.
 - 논문 3편 비교(빈 단어장, N=5000): ResNet 229 → 229, Attention 241 → 240, BERT 215 → 215. 바뀐 것은 `params`→`param`, `perceptrons`→`perceptron`, `embeddings`→`embedding`, `hyperparameters`→`hyperparameter`, 그리고 `ours`가 빠진 것뿐이다. 나머지 후보와 횟수는 같다.
 
 ## 2. M4-2 리뷰의 작은 문제 5건
