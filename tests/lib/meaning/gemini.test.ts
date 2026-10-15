@@ -18,17 +18,21 @@ function fakeClient(response: { text?: string; candidates?: { finishReason?: str
 const batch = [{ id: 7, word: 'address', sentence: 'We address the problem.' }];
 
 describe('createGeminiMeaningModel', () => {
-  it('asks Gemini 3.6 Flash for JSON at minimal thinking and maps the result', async () => {
+  it('asks Gemini 3.5 Flash-Lite for JSON at minimal thinking and maps the result', async () => {
     const { client, calls } = fakeClient({
       text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루다' }] }),
     });
     const result = await createGeminiMeaningModel(client)(batch);
 
     expect(result).toEqual([{ id: 7, meaningKo: '다루다' }]);
-    expect(MEANING_MODEL_ID).toBe('gemini-3.6-flash');
+    expect(MEANING_MODEL_ID).toBe('gemini-3.5-flash-lite');
     expect(calls[0]).toMatchObject({
-      model: 'gemini-3.6-flash',
-      config: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+      model: 'gemini-3.5-flash-lite',
+      config: {
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingLevel: 'MINIMAL' },
+        maxOutputTokens: 16384,
+      },
     });
     expect(JSON.parse(calls[0].contents as string)).toEqual(batch);
   });
