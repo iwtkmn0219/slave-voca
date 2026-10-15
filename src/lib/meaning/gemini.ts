@@ -39,6 +39,18 @@ const OutputSchema = z.object({
 
 export type GeminiClient = Pick<GoogleGenAI, 'models'>;
 
+// 한글 낱자모: 첫가끝 자모(U+1100–11FF)와 호환 자모(U+3130–318F). 정상 뜻은 완성형 음절로 온다.
+// 2026-10-16 실측에서 200개 묶음 응답이 통째로 낱자모로 깨져 온 일이 있었다(예: "머커뉴ᄆ").
+const LOOSE_JAMO = /[ᄀ-ᇿ㄰-㆏]/;
+
+// 응답 형식은 맞지만 뜻 글자가 깨진 경우. generate.ts의 재시도 판정이 이름으로 알아보고 다시 요청한다.
+export class GarbledOutputError extends Error {
+  constructor(readonly garbledCount: number) {
+    super(`뜻 글자가 깨져 왔습니다: ${garbledCount}개`);
+    this.name = 'GarbledOutputError';
+  }
+}
+
 // Gemini 3.5 Flash-Lite로 문맥 뜻을 만든다. 키는 GEMINI_API_KEY에서 읽는다(서버 전용).
 export function createGeminiMeaningModel(
   client: GeminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }),
@@ -63,6 +75,8 @@ export function createGeminiMeaningModel(
       throw new Error(`응답이 비었습니다: ${reason}`);
     }
     const parsed = OutputSchema.parse(JSON.parse(text));
+    const garbled = parsed.meanings.filter((m) => LOOSE_JAMO.test(m.meaning_ko)).length;
+    if (garbled > 0) throw new GarbledOutputError(garbled);
     return parsed.meanings.map((m) => ({ id: m.id, meaningKo: m.meaning_ko }));
   };
 }

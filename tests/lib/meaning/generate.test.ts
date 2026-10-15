@@ -6,6 +6,7 @@ import {
   type MeaningModel,
   type MeaningRequest,
 } from '@/lib/meaning/generate';
+import { GarbledOutputError } from '@/lib/meaning/gemini';
 
 const requests = (n: number): MeaningRequest[] =>
   Array.from({ length: n }, (_, i) => ({ id: i + 1, word: `w${i + 1}`, sentence: 's.' }));
@@ -129,6 +130,35 @@ describe('generateMeanings retries', () => {
   });
 });
 
+describe('generateMeanings with garbled responses', () => {
+  it('retries a garbled response and keeps the batch when a later try is clean', async () => {
+    const h = retryHarness();
+    let calls = 0;
+    const model: MeaningModel = async (batch) => {
+      if (++calls === 1) throw new GarbledOutputError(2);
+      return echoModel(batch);
+    };
+    const outcome = await generateMeanings(requests(3), model, h.options);
+    expect(calls).toBe(2);
+    expect(outcome.done).toHaveLength(3);
+    expect(h.warn.mock.calls.some((c) => /묶음 1/.test(String(c)) && /2개/.test(String(c)))).toBe(true);
+    h.restore();
+  });
+
+  it('fails the batch when every try comes back garbled', async () => {
+    const h = retryHarness();
+    let calls = 0;
+    const model: MeaningModel = async () => {
+      calls++;
+      throw new GarbledOutputError(5);
+    };
+    const outcome = await generateMeanings(requests(3), model, h.options);
+    expect(calls).toBe(4);
+    expect(outcome.failedIds).toEqual([1, 2, 3]);
+    h.restore();
+  });
+});
+
 describe('isRetryableError', () => {
   it('retries rate limits, server errors and network failures only', () => {
     for (const status of [429, 500, 502, 503, 504]) expect(isRetryableError(httpError(status))).toBe(true);
@@ -138,5 +168,6 @@ describe('isRetryableError', () => {
     expect(isRetryableError(Object.assign(new Error('socket'), { cause: { code: 'ECONNRESET' } }))).toBe(true);
     expect(isRetryableError(new SyntaxError('Unexpected end of JSON input'))).toBe(false);
     expect(isRetryableError(new Error('응답이 비었습니다: SAFETY'))).toBe(false);
+    expect(isRetryableError(new GarbledOutputError(3))).toBe(true); // 형식 오류 중 유일한 예외
   });
 });
