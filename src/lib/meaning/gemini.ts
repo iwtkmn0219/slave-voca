@@ -2,7 +2,7 @@ import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { z } from 'zod';
 import type { MeaningModel } from './generate';
 
-export const MEANING_MODEL_ID = 'gemini-3.5-flash-lite';
+export const MEANING_MODEL_ID = 'gemini-3.6-flash';
 
 const SYSTEM_INSTRUCTION = [
   '너는 영어 논문·발표 자료를 읽는 한국인 학습자를 돕는다.',
@@ -33,7 +33,7 @@ const OutputSchema = z.object({
 
 export type GeminiClient = Pick<GoogleGenAI, 'models'>;
 
-// Gemini 3.5 Flash-Lite로 문맥 뜻을 만든다. 키는 GEMINI_API_KEY에서 읽는다(서버 전용).
+// Gemini 3.6 Flash로 문맥 뜻을 만든다. 키는 GEMINI_API_KEY에서 읽는다(서버 전용).
 export function createGeminiMeaningModel(
   client: GeminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }),
 ): MeaningModel {
