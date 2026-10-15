@@ -12,7 +12,7 @@ import {
   listCandidates,
   replaceCandidates,
 } from '@/server/repo/candidates';
-import { DEFAULT_SETTINGS, getSettings } from '@/server/repo/settings';
+import { DEFAULT_SETTINGS, getSettings, saveSettings } from '@/server/repo/settings';
 import { listKnownLemmas, listWordLemmas } from '@/server/repo/vocabulary';
 
 const candidate = (lemma: string, count: number) => ({
@@ -92,7 +92,25 @@ describe('settings repo', () => {
         { key: 'daily_new_limit', value: 'abc' },
       ])
       .run();
-    expect(getSettings(db)).toEqual({ excludeTopN: 3000, dailyNewLimit: 20 });
+    expect(getSettings(db)).toEqual({ excludeTopN: 3000, dailyNewLimit: 20, autoSpeak: false });
+  });
+
+  it('accepts a daily new limit of 0 and falls back for values out of range', () => {
+    db.insert(settings)
+      .values([
+        { key: 'exclude_top_n', value: '999' },
+        { key: 'daily_new_limit', value: '0' },
+        { key: 'auto_speak', value: 'yes' },
+      ])
+      .run();
+    expect(getSettings(db)).toEqual({ excludeTopN: 5000, dailyNewLimit: 0, autoSpeak: false });
+  });
+
+  it('saves all settings and overwrites earlier values', () => {
+    saveSettings(db, { excludeTopN: 8000, dailyNewLimit: 0, autoSpeak: true });
+    saveSettings(db, { excludeTopN: 9000, dailyNewLimit: 5, autoSpeak: true });
+    expect(getSettings(db)).toEqual({ excludeTopN: 9000, dailyNewLimit: 5, autoSpeak: true });
+    expect(db.select().from(settings).all()).toHaveLength(3);
   });
 });
 
