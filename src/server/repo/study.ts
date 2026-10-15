@@ -125,14 +125,62 @@ export function countStudyToday(
   return { review, fresh: Math.min(waiting, slots) };
 }
 
+// 응답 전 카드의 일정 상태. review_logs.prev_card에 JSON으로 둔다(시각은 ms).
+interface CardSnapshot {
+  due: number;
+  stability: number;
+  difficulty: number;
+  elapsedDays: number;
+  scheduledDays: number;
+  learningSteps: number;
+  reps: number;
+  lapses: number;
+  state: number;
+  lastReview: number | null;
+  introducedAt: number | null;
+}
+
+function snapshot(w: WordRow): CardSnapshot {
+  return {
+    due: w.due.getTime(),
+    stability: w.stability,
+    difficulty: w.difficulty,
+    elapsedDays: w.elapsedDays,
+    scheduledDays: w.scheduledDays,
+    learningSteps: w.learningSteps,
+    reps: w.reps,
+    lapses: w.lapses,
+    state: w.state,
+    lastReview: w.lastReview?.getTime() ?? null,
+    introducedAt: w.introducedAt?.getTime() ?? null,
+  };
+}
+
+function restore(s: CardSnapshot) {
+  return {
+    due: new Date(s.due),
+    stability: s.stability,
+    difficulty: s.difficulty,
+    elapsedDays: s.elapsedDays,
+    scheduledDays: s.scheduledDays,
+    learningSteps: s.learningSteps,
+    reps: s.reps,
+    lapses: s.lapses,
+    state: s.state,
+    lastReview: s.lastReview === null ? null : new Date(s.lastReview),
+    introducedAt: s.introducedAt === null ? null : new Date(s.introducedAt),
+  };
+}
+
 // 응답을 기록하고 다음 복습 일정을 저장한다. 새 카드는 처음 응답한 시각을 introducedAt으로 남긴다.
 // 돌려주는 intervals는 응답 뒤 상태 기준 미리보기다. "모름"으로 세션 뒤에 다시 넣는 카드의 답 버튼을 갱신할 때 쓴다.
+// logId는 이 응답의 기록 id다. 직전 응답 되돌리기(undoAnswer)에 쓴다.
 export function recordAnswer(
   db: Db,
   wordId: number,
   answer: Answer,
   now: Date,
-): { due: Date; intervals: Intervals } {
+): { due: Date; intervals: Intervals; logId: number } {
   return db.transaction((tx) => {
     const word = tx.select().from(words).where(eq(words.id, wordId)).get();
     if (!word) throw new StudyError('카드를 찾을 수 없습니다.');
@@ -141,7 +189,35 @@ export function recordAnswer(
       .set({ ...next, introducedAt: word.introducedAt ?? now })
       .where(eq(words.id, wordId))
       .run();
-    tx.insert(reviewLogs).values({ wordId, rating: ANSWER_GRADE[answer], reviewedAt: now }).run();
-    return { due: next.due, intervals: previewIntervals(next, now) };
+    const log = tx
+      .insert(reviewLogs)
+      .values({ wordId, rating: ANSWER_GRADE[answer], reviewedAt: now, prevCard: JSON.stringify(snapshot(word)) })
+      .returning({ id: reviewLogs.id })
+      .get();
+    return { due: next.due, intervals: previewIntervals(next, now), logId: log.id };
+  });
+}
+
+// 직전 응답 되돌리기: 카드를 응답 전 상태로 되돌리고 그 기록을 지운다.
+// 그 카드의 가장 최근 기록만 되돌린다(다른 탭에서 또 답했으면 거부). 되돌린 카드의 wordId를 돌려준다.
+export function undoAnswer(db: Db, logId: number): { wordId: number } {
+  return db.transaction((tx) => {
+    const log = tx.select().from(reviewLogs).where(eq(reviewLogs.id, logId)).get();
+    if (!log) throw new StudyError('되돌릴 응답이 없습니다.');
+    if (log.prevCard === null) throw new StudyError('이 응답은 되돌릴 수 없습니다.');
+    const latest = tx
+      .select({ id: reviewLogs.id })
+      .from(reviewLogs)
+      .where(eq(reviewLogs.wordId, log.wordId))
+      .orderBy(desc(reviewLogs.id))
+      .limit(1)
+      .get();
+    if (latest?.id !== log.id) throw new StudyError('그 뒤에 이 카드에 다시 답해서 되돌릴 수 없습니다.');
+    tx.update(words)
+      .set(restore(JSON.parse(log.prevCard) as CardSnapshot))
+      .where(eq(words.id, log.wordId))
+      .run();
+    tx.delete(reviewLogs).where(eq(reviewLogs.id, log.id)).run();
+    return { wordId: log.wordId };
   });
 }
