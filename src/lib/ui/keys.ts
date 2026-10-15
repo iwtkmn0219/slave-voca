@@ -16,6 +16,10 @@ export function isTypingTarget(target: KeyTarget | null): boolean {
   return tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
+// 마우스로 눌러도 포커스를 가져가지 않게 한다(Tab 포커스는 그대로). 발음 버튼·필터 칩을 클릭한 뒤
+// Space·Enter가 그 버튼을 다시 누르지 않고 화면 단축키(뒷면 보기, 행 체크)로 가게 하려는 것이다.
+export const keepFocus = (e: { preventDefault(): void }) => e.preventDefault();
+
 // Space로 체크박스·버튼을 누르는 브라우저 기본 동작과 겹치지 않게, 그 위에서는 Space 단축키를 쓰지 않는다.
 export function isNativeSpaceTarget(target: KeyTarget | null): boolean {
   const tag = target?.tagName?.toUpperCase();

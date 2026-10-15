@@ -13,7 +13,7 @@ import {
   toggleOne,
   type ReviewFilter,
 } from "@/lib/review/selection";
-import { isNativeSpaceTarget, isTypingTarget } from "@/lib/ui/keys";
+import { isNativeSpaceTarget, isTypingTarget, keepFocus } from "@/lib/ui/keys";
 import { saveReview } from "./actions";
 
 export interface CandidateView {
@@ -148,6 +148,7 @@ export function CandidateTable({
                   key={f.value}
                   type="button"
                   aria-pressed={filter === f.value}
+                  onMouseDown={keepFocus}
                   onClick={() => {
                     setFilter(f.value);
                     setFocus(0);
@@ -165,7 +166,7 @@ export function CandidateTable({
         )}
         <span className="flex-1" />
         {!saving && (
-          <button type="button" onClick={toggleVisible} className={buttonClass({ variant: "ghost", size: "sm" })}>
+          <button type="button" onClick={toggleVisible} onMouseDown={keepFocus} className={buttonClass({ variant: "ghost", size: "sm" })}>
             {allVisibleOn ? "보이는 행 모두 해제" : "보이는 행 모두 선택"}
           </button>
         )}
@@ -185,7 +186,7 @@ export function CandidateTable({
           <thead>
             <tr className="border-b border-line-strong text-left text-xs font-semibold whitespace-nowrap text-muted">
               <th className="w-11 px-3 py-2" />
-              <th className="w-[300px] px-3 py-2">단어</th>
+              <th className="w-[240px] px-3 py-2">단어</th>
               <th className="w-14 px-3 py-2 text-right">횟수</th>
               <th className="px-3 py-2">원문 문장</th>
             </tr>
@@ -215,15 +216,15 @@ export function CandidateTable({
                   </td>
                   <td className="px-3 py-[7px]">
                     <div className="flex flex-wrap items-baseline gap-2">
-                      <span className={`font-en text-base ${on ? "font-bold text-ink" : "text-faint"}`}>{c.lemma}</span>
-                      {c.isExisting && <Tag kind="learning" />}
+                      <span className={`font-en text-base ${on ? "font-bold text-ink" : "text-muted"}`}>{c.lemma}</span>
+                      {c.isExisting && <Tag kind="learning" onFocusRow={focused} />}
                       {!c.inDictionary && <Tag kind="nodict" />}
                     </div>
                   </td>
                   <td className="px-3 py-[7px] text-right text-sm text-muted tabular-nums">{c.count}</td>
                   <td
                     className={`px-3 py-[7px] font-en text-[15px] leading-[1.55] ${
-                      on ? "text-ink-2" : "text-faint [&_mark]:font-normal [&_mark]:opacity-55"
+                      on ? "text-ink-2" : "text-muted [&_mark]:font-normal [&_mark]:opacity-55"
                     }`}
                   >
                     <Highlighted sentence={c.sentence} word={c.surface} />

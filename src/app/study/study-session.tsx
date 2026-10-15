@@ -205,14 +205,14 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
 
         {revealed ? (
           <>
-            <p className={`mt-1 font-en text-[19px] ${card.phonetic ? "text-muted" : "text-[15px] text-faint"}`}>
+            <p className={`mt-1 font-en text-[19px] ${card.phonetic ? "text-muted" : "text-[15px] text-muted"}`}>
               {card.phonetic ?? "발음기호 없음"}
             </p>
             {first && <UsageBlock usage={first} primary />}
             {second && <UsageBlock usage={second} primary={false} />}
           </>
         ) : (
-          <p className="mt-auto pt-12 text-center text-sm text-faint">이 문서에서 어떤 뜻이었는지 떠올려 보세요</p>
+          <p className="mt-auto pt-12 text-center text-sm text-muted">이 문서에서 어떤 뜻이었는지 떠올려 보세요</p>
         )}
       </section>
 

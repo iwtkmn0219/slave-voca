@@ -94,7 +94,7 @@ export function UploadForm() {
           type="text"
           name="title"
           placeholder="제목 (비우면 파일 이름)"
-          className="min-w-0 flex-[1_1_240px] rounded-md border border-line-strong bg-surface px-2.5 py-[7px] text-sm text-ink placeholder:text-faint"
+          className="min-w-0 flex-[1_1_240px] rounded-md border border-line-strong bg-surface px-2.5 py-[7px] text-sm text-ink placeholder:text-muted"
         />
         <button type="submit" disabled={pending} className={buttonClass({ variant: "primary" })}>
           {pending && <Spinner className="border-on-accent border-r-transparent" />}

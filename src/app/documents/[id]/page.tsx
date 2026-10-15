@@ -90,7 +90,7 @@ async function DocumentWords({ params }: { params: Promise<{ id: string }> }) {
               <tr key={r.id} className="border-b border-line align-top hover:bg-sunken/60">
                 <td className="px-3 py-2.5">
                   <div className="font-en text-[17px] font-bold">{r.lemma}</div>
-                  <div className={`font-en text-sm ${r.phonetic ? "text-muted" : "text-faint"}`}>
+                  <div className={`font-en text-sm ${r.phonetic ? "text-muted" : "text-muted"}`}>
                     {r.phonetic ?? "발음기호 없음"}
                   </div>
                 </td>

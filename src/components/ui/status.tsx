@@ -43,7 +43,7 @@ export function Status({
 export function Failed({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-[13px] text-muted">
-      <span aria-hidden className="w-2.5 border-t-[1.5px] border-dashed border-again" />
+      <span aria-hidden className="w-2.5 border-t-2 border-dashed border-again" />
       <span>{children}</span>
     </span>
   );

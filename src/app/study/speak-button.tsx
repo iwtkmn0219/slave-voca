@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { keepFocus } from "@/lib/ui/keys";
 
 const subscribe = () => () => {};
 const canSpeak = () => typeof window !== "undefined" && "speechSynthesis" in window;
@@ -27,6 +28,7 @@ export function SpeakButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={() => speak(text)}
+      onMouseDown={keepFocus}
       aria-label={`${text} 발음 듣기`}
       className="grid size-9 shrink-0 place-items-center rounded-full border border-line-strong bg-surface text-ink-2 hover:bg-sunken"
     >
