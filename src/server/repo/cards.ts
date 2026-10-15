@@ -166,3 +166,14 @@ export function countOccurrencesByDocument(db: Db): Map<number, number> {
     .all();
   return new Map(rows.map((r) => [r.documentId, r.total]));
 }
+
+// 문서별 뜻 생성 실패 수. 홈·문서 목록에서 안내할 때 쓴다.
+export function countFailedMeaningsByDocument(db: Db): Map<number, number> {
+  const rows = db
+    .select({ documentId: occurrences.documentId, total: count() })
+    .from(occurrences)
+    .where(eq(occurrences.meaningStatus, 'failed'))
+    .groupBy(occurrences.documentId)
+    .all();
+  return new Map(rows.map((r) => [r.documentId, r.total]));
+}
