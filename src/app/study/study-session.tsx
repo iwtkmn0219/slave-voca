@@ -14,7 +14,8 @@ import type { Answer } from "@/lib/srs/scheduler";
 import { advanceQueue } from "@/lib/srs/session";
 import { isNativeEnterTarget, isNativeSpaceTarget, isTypingTarget } from "@/lib/ui/keys";
 import type { StudyCard, Usage } from "@/server/repo/study";
-import { answerCard, regenerateUsageMeaning } from "./actions";
+import type { RegenerateUsageResult } from "@/server/services/usage-meaning";
+import { answerCard } from "./actions";
 import { SpeakButton, speak } from "./speak-button";
 
 const ANSWER_BUTTONS: { answer: Answer; label: string; key: string; tone: string }[] = [
@@ -80,9 +81,27 @@ function UsageBlock({
   );
 }
 
+// Server Action이 아니라 fetch로 부른다: Server Action은 응답 저장(answerCard)과 한 줄로 실행되어 응답이 기다리게 된다.
+async function requestRegeneration(occurrenceId: number): Promise<RegenerateUsageResult> {
+  const res = await fetch("/api/usage-meaning", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ occurrenceId }),
+  });
+  return (await res.json()) as RegenerateUsageResult;
+}
+
 export function StudySession({ cards }: { cards: StudyCard[] }) {
   const router = useRouter();
   const [queue, setQueue] = useState(cards);
+  // 큐를 바꾸는 곳은 모두 이 함수를 거친다: 응답이 끝나는 사이에 다시 만들기가 새 뜻을 넣었어도 최신 큐 위에서 갱신한다.
+  // (클릭할 때 잡힌 queue로 갱신하면 새 뜻이 옛 뜻으로 되돌아간다)
+  const queueRef = useRef(cards);
+  const updateQueue = (change: (q: StudyCard[]) => StudyCard[]) => {
+    queueRef.current = change(queueRef.current);
+    setQueue(queueRef.current);
+    return queueRef.current;
+  };
   const [revealed, setRevealed] = useState(false);
   const [answered, setAnswered] = useState(0);
   const [againCount, setAgainCount] = useState(0);
@@ -113,8 +132,10 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
         if (choice === "again") setAgainCount((n) => n + 1);
         const dues = new Map(lastDue).set(card.wordId, result.due);
         setLastDue(dues);
-        const next = advanceQueue(queue, choice).map((c) =>
-          c.wordId === card.wordId ? { ...c, isNew: false, intervals: result.intervals } : c,
+        const next = updateQueue((q) =>
+          advanceQueue(q, choice).map((c) =>
+            c.wordId === card.wordId ? { ...c, isNew: false, intervals: result.intervals } : c,
+          ),
         );
         if (next.length === 0) {
           const now = Date.now();
@@ -125,7 +146,6 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
               : null,
           );
         }
-        setQueue(next);
         setRevealed(false);
         // 다음 카드로 넘어가면 결과 문구를 지운다. 진행 중인 요청의 스피너는 그 카드가 다시 나올 때를 위해 둔다.
         setRegen((m) => new Map([...m].filter(([, s]) => s.phase === "busy")));
@@ -154,13 +174,13 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
     setUsageRegen(occurrenceId, { phase: "busy" });
     const finish = (state: RegenState) =>
       setUsageRegen(occurrenceId, currentWordId.current === wordId ? state : undefined);
-    regenerateUsageMeaning(occurrenceId)
+    requestRegeneration(occurrenceId)
       .then((result) => {
         if (result.error !== null) {
           finish({ phase: "failed", text: result.error });
           return;
         }
-        setQueue((q) =>
+        updateQueue((q) =>
           q.map((c) => ({
             ...c,
             usages: c.usages.map((u) =>
