@@ -71,12 +71,18 @@ export interface MeaningRequestRow {
   id: number;
   lemma: string;
   sentence: string;
+  meaningStatus: MeaningStatus;
 }
 
 export function listMeaningRequests(db: Db, occurrenceIds: readonly number[]): MeaningRequestRow[] {
   if (occurrenceIds.length === 0) return [];
   return db
-    .select({ id: occurrences.id, lemma: words.lemma, sentence: occurrences.sentence })
+    .select({
+      id: occurrences.id,
+      lemma: words.lemma,
+      sentence: occurrences.sentence,
+      meaningStatus: occurrences.meaningStatus,
+    })
     .from(occurrences)
     .innerJoin(words, eq(words.id, occurrences.wordId))
     .where(inArray(occurrences.id, [...occurrenceIds]))
@@ -132,6 +138,7 @@ export function setPhonetic(db: Db, wordId: number, phonetic: string): void {
 
 export interface OccurrenceView {
   id: number;
+  wordId: number;
   lemma: string;
   phonetic: string | null;
   surface: string;
@@ -144,6 +151,7 @@ export function listOccurrencesByDocument(db: Db, documentId: number): Occurrenc
   return db
     .select({
       id: occurrences.id,
+      wordId: words.id,
       lemma: words.lemma,
       phonetic: words.phonetic,
       surface: occurrences.surface,
@@ -176,4 +184,57 @@ export function countFailedMeaningsByDocument(db: Db): Map<number, number> {
     .groupBy(occurrences.documentId)
     .all();
   return new Map(rows.map((r) => [r.documentId, r.total]));
+}
+
+// 용례 하나의 지금 뜻과 상태. 복습 카드에서 다시 만든 뒤 새 뜻을 돌려줄 때 쓴다.
+export function getOccurrenceMeaning(
+  db: Db,
+  occurrenceId: number,
+): { meaningKo: string | null; meaningStatus: MeaningStatus } | undefined {
+  return db
+    .select({ meaningKo: occurrences.meaningKo, meaningStatus: occurrences.meaningStatus })
+    .from(occurrences)
+    .where(eq(occurrences.id, occurrenceId))
+    .get();
+}
+
+// 문서에서 뜻 생성에 실패한 용례. "모두 다시 시도"가 쓴다.
+export function listFailedMeaningIds(db: Db, documentId: number): number[] {
+  return db
+    .select({ id: occurrences.id })
+    .from(occurrences)
+    .where(and(eq(occurrences.documentId, documentId), eq(occurrences.meaningStatus, 'failed')))
+    .orderBy(asc(occurrences.id))
+    .all()
+    .map((r) => r.id);
+}
+
+// 용례가 문서 안에 있는지. 다른 문서의 용례 id로 고치거나 다시 시도하지 못하게 막는다.
+export function occurrencesBelongTo(db: Db, documentId: number, occurrenceIds: readonly number[]): boolean {
+  if (occurrenceIds.length === 0) return true;
+  const found = db
+    .select({ id: occurrences.id })
+    .from(occurrences)
+    .where(and(eq(occurrences.documentId, documentId), inArray(occurrences.id, [...occurrenceIds])))
+    .all();
+  return found.length === new Set(occurrenceIds).size;
+}
+
+// 카드별 용례 수(모든 문서). 카드 삭제 확인 문구에 쓴다.
+export function countOccurrencesByWord(db: Db, wordIds: readonly number[]): Map<number, number> {
+  if (wordIds.length === 0) return new Map();
+  const rows = db
+    .select({ wordId: occurrences.wordId, total: count() })
+    .from(occurrences)
+    .where(inArray(occurrences.wordId, [...new Set(wordIds)]))
+    .groupBy(occurrences.wordId)
+    .all();
+  return new Map(rows.map((r) => [r.wordId, r.total]));
+}
+
+// 카드 삭제: 카드(words)를 지우면 외래 키(ON DELETE CASCADE)로 모든 문서의 용례와 복습 기록이 함께 지워진다.
+// 삭제한 단어는 아는 단어(known_words)에 넣지 않는다(스펙 7장). 카드가 없으면 false.
+export function deleteCard(db: Db, wordId: number): boolean {
+  const row = db.delete(words).where(eq(words.id, wordId)).returning({ id: words.id }).get();
+  return row !== undefined;
 }
