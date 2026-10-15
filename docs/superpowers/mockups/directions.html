@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>디자인 방향 비교</title>
+<!-- 목업 전용 CDN. 실제 구현은 next/font로 자체 호스팅한다 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gentium+Book+Plus:ital,wght@0,400;0,700;1,400&family=Inter:opsz,wght@14..32,400..700&display=swap">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #DAD8D3; color: #1d1d1d; font: 15px/1.6 "Pretendard Variable", Pretendard, system-ui, sans-serif; word-break: keep-all; -webkit-font-smoothing: antialiased; }
+.intro { max-width: 1240px; margin: 0 auto; padding: 32px 16px 8px; }
+.intro h1 { margin: 0 0 4px; font-size: 22px; }
+.intro p { margin: 0; color: #555; font-size: 14px; }
+.band { max-width: 1240px; margin: 28px auto 0; padding: 0 16px; }
+.band-head { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; margin-bottom: 10px; }
+.band-head h2 { margin: 0; font-size: 18px; }
+.band-head p { margin: 0; font-size: 13.5px; color: #444; }
+.sw { display: inline-flex; gap: 4px; margin-left: auto; }
+.sw i { width: 22px; height: 22px; border-radius: 5px; border: 1px solid rgb(0 0 0 / .12); }
+.stage { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 0; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 24px rgb(0 0 0 / .14); }
+.stage > div { padding: 28px; min-width: 0; }
+.cap { font-size: 11.5px; letter-spacing: .04em; margin-bottom: 14px; opacity: .65; }
+mark { color: inherit; }
+kbd { font: 500 11px/1 inherit; border-radius: 4px; padding: 2px 5px; }
+table { width: 100%; border-collapse: collapse; }
+@media (max-width: 900px) { .stage { grid-template-columns: 1fr; } }
+
+/* ───── A 지면 ───── */
+.A { --bg:#F4F1EA; --sf:#FBFAF7; --ln:#E2DDD2; --ink:#22201C; --ink2:#4A463F; --mu:#6E685E; --ac:#2F5D8C; --acs:#E6EDF5; --mk:#F0DB8C; }
+.A .stage > div { background: var(--bg); color: var(--ink); }
+.A .stage > div + div { border-left: 1px solid var(--ln); }
+.A .card { background: var(--sf); border: 1px solid var(--ln); border-radius: 10px; padding: 26px 28px; box-shadow: 0 1px 2px rgb(34 32 28 / .06); }
+.A .lemma { font: 700 36px/1.1 "Gentium Book Plus", serif; }
+.A .ipa { font: 18px "Gentium Book Plus", serif; color: var(--mu); margin-top: 4px; }
+.A .ko { font-size: 20px; font-weight: 700; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ln); }
+.A .sen { font: 16.5px/1.6 "Gentium Book Plus", serif; color: var(--ink2); margin-top: 8px; }
+.A .src { font: italic 13px "Gentium Book Plus", serif; color: var(--mu); margin-top: 6px; }
+.A mark { background: linear-gradient(transparent 55%, var(--mk) 55%); font-weight: 700; }
+.A .ans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.A .ans span { text-align: center; padding: 11px; border-radius: 9px; font-weight: 700; font-size: 15px; }
+.A .ans span:nth-child(1) { background: #F5E3DF; color: #A6463B; }
+.A .ans span:nth-child(2) { background: #F3E9D0; color: #7F5A0C; }
+.A .ans span:nth-child(3) { background: #E0EEE4; color: #3B7150; }
+.A kbd { border: 1px solid #CEC7B8; color: var(--mu); background: var(--sf); }
+.A td { border-bottom: 1px solid var(--ln); padding: 8px 10px; font-size: 14px; vertical-align: top; }
+.A td.w { font: 700 16px "Gentium Book Plus", serif; width: 34%; }
+.A td.s { font: 15px/1.5 "Gentium Book Plus", serif; color: var(--ink2); }
+.A td.n { color: var(--mu); text-align: right; width: 40px; font-variant-numeric: tabular-nums; }
+.A .tg { font: 600 11px "Pretendard Variable", sans-serif; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: 2px; }
+.A .tg.l { background: var(--acs); color: var(--ac); }
+.A .tg.d { border: 1px dashed #CEC7B8; color: var(--mu); }
+.A tr.off td { color: #857E72; } .A tr.off td.w { font-weight: 400; }
+.A .cb { width: 30px; } .A .cb i { display: inline-block; width: 16px; height: 16px; border-radius: 4px; background: var(--ac); margin-top: 3px; } .A tr.off .cb i { background: none; border: 1.5px solid #CEC7B8; }
+
+/* ───── B 작업대 ───── */
+.B { --bg:#FFFFFF; --sf:#F7F7F8; --ln:#E4E4E7; --ink:#18181B; --ink2:#3F3F46; --mu:#71717A; --ac:#4C5BD4; --acs:#EEF0FC; --mk:#DCE1FB; }
+.B .stage > div { background: var(--bg); color: var(--ink); }
+.B .stage > div + div { border-left: 1px solid var(--ln); }
+.B .card { border: 1px solid var(--ln); border-radius: 6px; display: grid; grid-template-columns: 1fr; }
+.B .card .hd { display: flex; align-items: baseline; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--ln); background: var(--sf); }
+.B .lemma { font: 650 26px/1.2 "Pretendard Variable", sans-serif; letter-spacing: -.01em; }
+.B .ipa { font-size: 15px; color: var(--mu); }
+.B .bd { padding: 14px 16px; }
+.B .row { display: grid; grid-template-columns: 64px 1fr; gap: 6px 12px; font-size: 14px; }
+.B .row b { font-size: 12px; color: var(--mu); font-weight: 600; padding-top: 2px; }
+.B .ko { font-size: 16px; font-weight: 650; }
+.B .sen { color: var(--ink2); line-height: 1.55; }
+.B .src { color: var(--mu); font-size: 13px; }
+.B mark { background: var(--mk); border-radius: 3px; padding: 0 2px; font-weight: 600; }
+.B .ans { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--ln); }
+.B .ans span { text-align: center; padding: 9px; font-size: 14px; font-weight: 600; border-left: 1px solid var(--ln); }
+.B .ans span:first-child { border-left: 0; color: #B42318; } .B .ans span:nth-child(2) { color: #B54708; } .B .ans span:nth-child(3) { color: #067647; }
+.B kbd { border: 1px solid var(--ln); color: var(--mu); background: var(--sf); font-family: ui-monospace, monospace; }
+.B td { border-bottom: 1px solid var(--ln); padding: 5px 8px; font-size: 13.5px; white-space: nowrap; }
+.B td.w { font-weight: 650; width: 1%; }
+.B td.s { color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+.B td.n { color: var(--mu); text-align: right; width: 32px; font-variant-numeric: tabular-nums; }
+.B .tg { font-size: 11px; font-weight: 600; border-radius: 3px; padding: 0 5px; }
+.B .tg.l { background: var(--acs); color: var(--ac); } .B .tg.d { background: #FEF0C7; color: #93370D; }
+.B tr.off td { color: #A1A1AA; text-decoration: line-through; text-decoration-color: #D4D4D8; }
+.B tr.f td { background: var(--acs); }
+.B .cb { width: 24px; } .B .cb i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; background: var(--ac); vertical-align: -2px; } .B tr.off .cb i { background: none; border: 1.5px solid #D4D4D8; }
+.B .bar { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--mu); padding: 6px 8px; background: var(--sf); border: 1px solid var(--ln); border-radius: 6px; margin-bottom: 8px; }
+
+/* ───── C 야간 집중 ───── */
+.C { --bg:#111317; --sf:#1A1D23; --ln:#2A2E36; --ink:#E8E6E1; --ink2:#B9B6AF; --mu:#858892; --ac:#E3A857; --mk:rgb(227 168 87 / .22); }
+.C .stage > div { background: var(--bg); color: var(--ink); }
+.C .stage > div + div { border-left: 1px solid var(--ln); }
+.C .card { text-align: center; padding: 34px 12px 8px; }
+.C .lemma { font: 600 44px/1.1 Inter, sans-serif; letter-spacing: -.025em; }
+.C .ipa { font: 17px Inter, sans-serif; color: var(--mu); margin-top: 8px; }
+.C .ko { font-size: 22px; font-weight: 600; margin-top: 26px; color: var(--ac); }
+.C .sen { font: 16px/1.7 Inter, sans-serif; color: var(--ink2); margin: 12px auto 0; max-width: 460px; }
+.C .src { font-size: 12.5px; color: var(--mu); margin-top: 10px; }
+.C mark { background: none; color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--ac); }
+.C .ans { display: flex; justify-content: center; gap: 28px; margin-top: 30px; font-size: 14px; color: var(--mu); }
+.C .ans span b { color: var(--ink); font-weight: 600; margin-left: 6px; }
+.C kbd { border: 1px solid var(--ln); color: var(--ink2); background: var(--sf); }
+.C .item { padding: 14px 4px; border-bottom: 1px solid var(--ln); display: grid; grid-template-columns: 22px 1fr; gap: 4px 12px; }
+.C .item .w { font: 600 17px Inter, sans-serif; }
+.C .item .s { grid-column: 2; font: 14px/1.6 Inter, sans-serif; color: var(--ink2); }
+.C .item .n { color: var(--mu); font-size: 12.5px; margin-left: 8px; font-weight: 400; }
+.C .tg { font-size: 11px; color: var(--ac); border: 1px solid rgb(227 168 87 / .35); border-radius: 999px; padding: 0 7px; margin-left: 8px; }
+.C .tg.d { color: var(--mu); border-color: var(--ln); }
+.C .item.off { opacity: .4; }
+.C .cb i { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--ac); margin-top: 5px; } .C .item.off .cb i { background: none; border: 1.5px solid var(--mu); }
+
+.notes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; font-size: 13.5px; margin-top: 12px; }
+.notes div { background: rgb(255 255 255 / .55); border-radius: 8px; padding: 10px 14px; }
+.notes b { display: block; font-size: 12px; color: #555; margin-bottom: 2px; }
+@media (max-width: 900px) { .notes { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="intro">
+  <h1>디자인 방향 3안 비교</h1>
+  <p>같은 데이터를 세 방향으로 그렸습니다. 왼쪽은 복습 카드 뒷면, 오른쪽은 검토 표 일부입니다. 뜻은 예시입니다. 추천안(A)의 전체 화면은 a-paper.html에 있습니다.</p>
+</div>
+
+<!-- A -->
+<section class="band A">
+  <div class="band-head"><h2>A안 「지면」 (추천)</h2><p>종이색 바탕, 영어는 세리프, 한글은 고딕. 논문을 읽던 그 지면이 카드가 된 느낌. 밀도 보통.</p>
+    <span class="sw"><i style="background:#F4F1EA"></i><i style="background:#FBFAF7"></i><i style="background:#22201C"></i><i style="background:#2F5D8C"></i><i style="background:#F0DB8C"></i></span></div>
+  <div class="stage">
+    <div>
+      <div class="cap">복습 · 뒷면</div>
+      <div class="card">
+        <div class="lemma">approximate</div>
+        <div class="ipa">/əˈprɑksəmət/</div>
+        <div class="ko">(복잡한 함수를) 근사하다</div>
+        <div class="sen">If one hypothesizes that multiple nonlinear layers can asymptotically <mark>approximate</mark> complicated functions…</div>
+        <div class="src">— Deep Residual Learning (ResNet)</div>
+      </div>
+      <div class="ans"><span>모름 <kbd>1</kbd></span><span>애매 <kbd>2</kbd></span><span>앎 <kbd>3</kbd></span></div>
+    </div>
+    <div>
+      <div class="cap">검토 · 212개 중 194개 선택</div>
+      <table><tbody>
+        <tr><td class="cb"><i></i></td><td class="w">transduction</td><td class="n">7</td><td class="s">The dominant sequence <mark>transduction</mark> models are based on complex recurrent…</td></tr>
+        <tr><td class="cb"><i></i></td><td class="w">recurrent<span class="tg l">이미 학습 중</span></td><td class="n">12</td><td class="s">…based on complex <mark>recurrent</mark> or convolutional neural networks…</td></tr>
+        <tr class="off"><td class="cb"><i></i></td><td class="w">encoder</td><td class="n">21</td><td class="s">…neural networks that include an <mark>encoder</mark> and a decoder.</td></tr>
+        <tr><td class="cb"><i></i></td><td class="w">dispense</td><td class="n">1</td><td class="s">…based solely on attention mechanisms, <mark>dispensing</mark> with recurrence…</td></tr>
+        <tr class="off"><td class="cb"><i></i></td><td class="w">bleu<span class="tg d">사전에 없음</span></td><td class="n">9</td><td class="s">Our model achieves 28.4 <mark>BLEU</mark> on the WMT 2014 English-to-German…</td></tr>
+        <tr><td class="cb"><i></i></td><td class="w">parallelizable</td><td class="n">2</td><td class="s">…while being more <mark>parallelizable</mark> and requiring significantly less time…</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+  <div class="notes"><div><b>글꼴</b>Gentium Book Plus(영어·원문·IPA) + Pretendard(한글·UI)</div><div><b>잘 맞는 곳</b>복습 카드, 문서 단어 목록. 원문 문장이 논문처럼 읽힘</div><div><b>약한 곳</b>세리프는 같은 줄 높이에서 고딕보다 조금 넓어 검토 표 밀도가 B보다 낮음</div></div>
+</section>
+
+<!-- B -->
+<section class="band B">
+  <div class="band-head"><h2>B안 「작업대」</h2><p>흰 바탕, 회색 선, 고딕 한 벌. 개발 도구·스프레드시트처럼 조밀하고 키보드 중심. 밀도 높음.</p>
+    <span class="sw"><i style="background:#FFFFFF"></i><i style="background:#F7F7F8"></i><i style="background:#18181B"></i><i style="background:#4C5BD4"></i><i style="background:#DCE1FB"></i></span></div>
+  <div class="stage">
+    <div>
+      <div class="cap">복습 · 뒷면</div>
+      <div class="card">
+        <div class="hd"><span class="lemma">approximate</span><span class="ipa">/əˈprɑksəmət/</span></div>
+        <div class="bd">
+          <div class="row"><b>문맥 뜻</b><span class="ko">(복잡한 함수를) 근사하다</span>
+          <b>원문</b><span class="sen">If one hypothesizes that multiple nonlinear layers can asymptotically <mark>approximate</mark> complicated functions…</span>
+          <b>출처</b><span class="src">Deep Residual Learning (ResNet)</span></div>
+        </div>
+        <div class="ans"><span>모름 <kbd>1</kbd></span><span>애매 <kbd>2</kbd></span><span>앎 <kbd>3</kbd></span></div>
+      </div>
+    </div>
+    <div>
+      <div class="bar"><span>194 / 212 선택</span><span>·</span><span><kbd>J</kbd><kbd>K</kbd> 이동 <kbd>X</kbd> 체크 <kbd>Ctrl ↵</kbd> 저장</span></div>
+      <table><tbody>
+        <tr class="f"><td class="cb"><i></i></td><td class="w">transduction</td><td class="n">7</td><td class="s">The dominant sequence <mark>transduction</mark> models are based on complex recurrent or convolutional neural networks</td></tr>
+        <tr><td class="cb"><i></i></td><td class="w">recurrent <span class="tg l">학습 중</span></td><td class="n">12</td><td class="s">…based on complex <mark>recurrent</mark> or convolutional neural networks that include an encoder…</td></tr>
+        <tr class="off"><td class="cb"><i></i></td><td class="w">encoder</td><td class="n">21</td><td class="s">…neural networks that include an <mark>encoder</mark> and a decoder.</td></tr>
+        <tr><td class="cb"><i></i></td><td class="w">dispense</td><td class="n">1</td><td class="s">…based solely on attention mechanisms, <mark>dispensing</mark> with recurrence and convolutions entirely.</td></tr>
+        <tr class="off"><td class="cb"><i></i></td><td class="w">bleu <span class="tg d">사전 없음</span></td><td class="n">9</td><td class="s">Our model achieves 28.4 <mark>BLEU</mark> on the WMT 2014 English-to-German translation task</td></tr>
+        <tr><td class="cb"><i></i></td><td class="w">parallelizable</td><td class="n">2</td><td class="s">…while being more <mark>parallelizable</mark> and requiring significantly less time to train.</td></tr>
+        <tr><td class="cb"><i></i></td><td class="w">generalize</td><td class="n">3</td><td class="s">We show that the Transformer <mark>generalizes</mark> well to other tasks by applying it…</td></tr>
+        <tr><td class="cb"><i></i></td><td class="w">constituency</td><td class="n">2</td><td class="s">…applying it successfully to English <mark>constituency</mark> parsing both with large and limited…</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+  <div class="notes"><div><b>글꼴</b>Pretendard 한 벌(영어·IPA 포함). 숫자는 고정폭 숫자</div><div><b>잘 맞는 곳</b>검토 표: 한 화면 25행 이상, 문장은 한 줄로 자름</div><div><b>약한 곳</b>복습 카드가 서식처럼 보이고, 원문이 잘려 문맥이 덜 보임. 개성이 적음</div></div>
+</section>
+
+<!-- C -->
+<section class="band C">
+  <div class="band-head"><h2 style="color:#1d1d1d">C안 「야간 집중」</h2><p>어두운 바탕이 기본, 가운데 정렬된 큰 글자, 강조색 하나(호박색). 밤에 한 장씩 집중하는 화면. 밀도 낮음.</p>
+    <span class="sw"><i style="background:#111317"></i><i style="background:#1A1D23"></i><i style="background:#E8E6E1"></i><i style="background:#E3A857"></i><i style="background:#858892"></i></span></div>
+  <div class="stage">
+    <div>
+      <div class="cap">복습 · 뒷면</div>
+      <div class="card">
+        <div class="lemma">approximate</div>
+        <div class="ipa">/əˈprɑksəmət/</div>
+        <div class="ko">(복잡한 함수를) 근사하다</div>
+        <div class="sen">If one hypothesizes that multiple nonlinear layers can asymptotically <mark>approximate</mark> complicated functions…</div>
+        <div class="src">Deep Residual Learning (ResNet)</div>
+        <div class="ans"><span><kbd>1</kbd><b>모름</b></span><span><kbd>2</kbd><b>애매</b></span><span><kbd>3</kbd><b>앎</b></span></div>
+      </div>
+    </div>
+    <div>
+      <div class="cap">검토 · 212개 중 194개 선택</div>
+      <div class="item"><span class="cb"><i></i></span><span class="w">transduction<span class="n">7회</span></span><span class="s">The dominant sequence <mark>transduction</mark> models are based on complex recurrent…</span></div>
+      <div class="item"><span class="cb"><i></i></span><span class="w">recurrent<span class="n">12회</span><span class="tg">이미 학습 중</span></span><span class="s">…based on complex <mark>recurrent</mark> or convolutional neural networks…</span></div>
+      <div class="item off"><span class="cb"><i></i></span><span class="w">encoder<span class="n">21회</span></span><span class="s">…neural networks that include an <mark>encoder</mark> and a decoder.</span></div>
+      <div class="item"><span class="cb"><i></i></span><span class="w">dispense<span class="n">1회</span></span><span class="s">…based solely on attention mechanisms, <mark>dispensing</mark> with recurrence…</span></div>
+    </div>
+  </div>
+  <div class="notes"><div><b>글꼴</b>Inter(영어·IPA, 화면용 큰 크기 대응) + Pretendard(한글). Pretendard가 Inter 기반이라 섞여도 자연스러움</div><div><b>잘 맞는 곳</b>복습: 화면에 카드 하나만, 밤에 눈부심이 적음</div><div><b>약한 곳</b>검토 표가 한 화면 8행 안팎이라 200개 훑기에 스크롤이 많음. 밝은 낮 환경과 PDF 리더(흰 바탕) 사이를 오가면 눈이 피곤함</div></div>
+</section>
+<div style="height:48px"></div>
+</body>
+</html>
