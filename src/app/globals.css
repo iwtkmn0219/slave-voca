@@ -1,26 +1,163 @@
 @import "tailwindcss";
 
+/* 디자인 토큰: docs/superpowers/specs/2026-10-15-ui-redesign.md 3장 (A안 「지면」).
+   컴포넌트는 dark: 변형을 쓰지 않고 이 변수만 쓴다. 테마는 변수 값만 바꾼다. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --bg: #f4f1ea;
+  --surface: #fbfaf7;
+  --sunken: #eeeae1;
+  --line: #e2ddd2;
+  --line-strong: #cec7b8;
+  --ink: #22201c;
+  --ink-2: #4a463f;
+  --muted: #6e685e;
+  --faint: #857e72;
+  --accent: #2f5d8c;
+  --accent-hover: #264d75;
+  --accent-soft: #e6edf5;
+  --on-accent: #ffffff;
+  --mark: #f0db8c;
+  --again: #a6463b;
+  --again-soft: #f5e3df;
+  --hard: #7f5a0c;
+  --hard-soft: #f3e9d0;
+  --good: #3b7150;
+  --good-soft: #e0eee4;
+  --shadow-1: 0 1px 2px rgb(34 32 28 / 0.06), 0 1px 1px rgb(34 32 28 / 0.04);
+  --shadow-2: 0 4px 16px rgb(34 32 28 / 0.08), 0 1px 3px rgb(34 32 28 / 0.06);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --bg: #171614;
+    --surface: #1f1e1b;
+    --sunken: #141311;
+    --line: #2f2d29;
+    --line-strong: #403d37;
+    --ink: #ece7dd;
+    --ink-2: #cfc9bd;
+    --muted: #a29b8e;
+    --faint: #807a70;
+    --accent: #8db4de;
+    --accent-hover: #a7c6e8;
+    --accent-soft: #223041;
+    --on-accent: #10161e;
+    --mark: rgb(222 178 64 / 0.32);
+    --again: #e08a7e;
+    --again-soft: #3a2421;
+    --hard: #d9b45e;
+    --hard-soft: #352b16;
+    --good: #8cc79c;
+    --good-soft: #1e3225;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 6px 20px rgb(0 0 0 / 0.45);
+    color-scheme: dark;
   }
 }
 
+/* M4 설정 화면의 테마 선택용. 위 다크 값과 같다. */
+:root[data-theme="dark"] {
+  --bg: #171614;
+  --surface: #1f1e1b;
+  --sunken: #141311;
+  --line: #2f2d29;
+  --line-strong: #403d37;
+  --ink: #ece7dd;
+  --ink-2: #cfc9bd;
+  --muted: #a29b8e;
+  --faint: #807a70;
+  --accent: #8db4de;
+  --accent-hover: #a7c6e8;
+  --accent-soft: #223041;
+  --on-accent: #10161e;
+  --mark: rgb(222 178 64 / 0.32);
+  --again: #e08a7e;
+  --again-soft: #3a2421;
+  --hard: #d9b45e;
+  --hard-soft: #352b16;
+  --good: #8cc79c;
+  --good-soft: #1e3225;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 6px 20px rgb(0 0 0 / 0.45);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-mark: var(--mark);
+  --color-again: var(--again);
+  --color-again-soft: var(--again-soft);
+  --color-hard: var(--hard);
+  --color-hard-soft: var(--hard-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --shadow-1: var(--shadow-1);
+  --shadow-2: var(--shadow-2);
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  /* 한글·UI는 Pretendard, 영어 단어·원문·IPA는 Gentium(제안서 1장: IPA 18자 검증). ᵻ 같은 드문 기호는 Noto로 넘긴다 */
+  --font-sans: var(--font-pretendard), system-ui, sans-serif;
+  --font-en: var(--font-gentium), "Noto Serif", Georgia, serif;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  word-break: keep-all;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 원문 속 단어: 글자 아래 45%만 칠하는 형광펜 */
+mark {
+  background: linear-gradient(transparent 55%, var(--mark) 55%);
+  color: inherit;
+  padding: 0 1px;
+  font-weight: 700;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 실제 진행률이 없는 처리 중 막대: 왕복 */
+@keyframes indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
