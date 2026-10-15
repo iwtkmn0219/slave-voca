@@ -22,7 +22,8 @@ export function getSettings(db: Db): Settings {
   const stored = new Map(db.select().from(settings).all().map((r) => [r.key, r.value]));
   const readInt = (key: 'excludeTopN' | 'dailyNewLimit', range: { min: number; max: number }) => {
     const raw = stored.get(KEYS[key]);
-    const value = raw === undefined ? NaN : Number(raw);
+    // 숫자만 받는다. Number('')는 0이라, 빈 값이 하루 새 카드 0으로 읽히지 않게 한다.
+    const value = raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : NaN;
     return Number.isInteger(value) && value >= range.min && value <= range.max ? value : DEFAULT_SETTINGS[key];
   };
   const speak = stored.get(KEYS.autoSpeak);

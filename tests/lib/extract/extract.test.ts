@@ -109,15 +109,60 @@ describe('extractCandidates', () => {
   it('merges plurals the lemmatizer missed into the singular candidate', () => {
     const result = extractCandidates(
       ['One dataset was used.', 'Two datasets were used.', 'More datasets.'],
-      options(),
+      options({ inDictionary: (l) => l !== 'datasets' && l !== 'dataset' }),
     );
     const dataset = result.find((c) => c.lemma === 'dataset');
     expect(dataset).toMatchObject({ count: 3, sentence: 'One dataset was used.' });
     expect(result.find((c) => c.lemma === 'datasets')).toBeUndefined();
   });
 
-  it('does not strip the s of words ending in ss', () => {
-    expect(lemmas(['Glass and glas.'])).toEqual(['glas', 'glass']);
+  it('drops a missed plural when its singular is a known word', () => {
+    const opts = options({ inDictionary: (l) => l !== 'logits', knownLemmas: new Set(['logit']) });
+    expect(lemmas(['The logits are scaled.'], opts)).not.toContain('logits');
+    expect(lemmas(['The logits are scaled.'], opts)).not.toContain('logit');
+  });
+
+  it('keeps dictionary words ending in s even when the s-less form is a candidate', () => {
+    // M2 리뷰: len(코드)이 후보일 때 lens가 len으로 합쳐지던 문제
+    const result = lemmas(['The lens and len differ, with bias.'], options({ inDictionary: (l) => l !== 'len' }));
+    expect(result).toEqual(expect.arrayContaining(['lens', 'len', 'bias']));
+  });
+
+  it('keeps a frequency-list word whose s-less form is not a word', () => {
+    // whereas는 WordNet에 없지만 빈도표에 있고 wherea는 없다. 학술어 예외도 whereas로 받아야 한다.
+    const opts = options({
+      rankOf: (w) => ({ whereas: 4647 })[w],
+      isAcademic: (l) => l === 'whereas',
+      inDictionary: () => false,
+    });
+    expect(lemmas(['The first grows, whereas the second shrinks.'], opts)).toContain('whereas');
+  });
+
+  it('turns missed -ies and -xes plurals into the right singular, not a stem without its ending', () => {
+    // Codex 리뷰: nonlinearities → nonlinearitie, softmaxes → softmaxe 같은 잘못된 원형을 만들었다.
+    const opts = options({ inDictionary: () => false });
+    expect(lemmas(['The nonlinearities and softmaxes.'], opts)).toEqual(['nonlinearity', 'softmax']);
+  });
+
+  it('prefers the singular form the dictionary knows', () => {
+    const opts = options({ inDictionary: (l) => l === 'database' || l === 'cache' });
+    expect(lemmas(['The databases and caches.'], opts)).toEqual(['cache', 'database']);
+  });
+
+  it('does not strip the s of words ending in ss, us or is', () => {
+    const opts = options({ inDictionary: () => false });
+    expect(lemmas(['Glass, softplus and axis.'], opts)).toEqual(['axis', 'glass', 'softplus']);
+  });
+
+  it('folds diacritics into the lemma and keeps the written surface', () => {
+    const result = extractCandidates(['A naïve café baseline.'], options());
+    expect(result.find((c) => c.lemma === 'naive')).toMatchObject({ surface: 'naïve' });
+    expect(result.find((c) => c.lemma === 'cafe')).toMatchObject({ surface: 'café' });
+  });
+
+  it('reads decomposed letters as one word', () => {
+    const decomposed = 'A nai\u0308ve baseline.';
+    expect(lemmas([decomposed])).toContain('naive');
   });
 
   it('flags lemmas missing from the dictionary', () => {

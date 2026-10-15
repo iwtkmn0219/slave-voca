@@ -85,6 +85,11 @@ describe('settings repo', () => {
     expect(getSettings(db)).toEqual(DEFAULT_SETTINGS);
   });
 
+  it('reads an empty stored number as the default, not as 0', () => {
+    db.insert(settings).values({ key: 'daily_new_limit', value: '' }).run();
+    expect(getSettings(db).dailyNewLimit).toBe(20);
+  });
+
   it('reads stored values and ignores invalid ones', () => {
     db.insert(settings)
       .values([

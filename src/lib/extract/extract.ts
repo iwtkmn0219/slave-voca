@@ -21,6 +21,7 @@ export interface ExtractOptions {
 
 const TOKEN = /\p{L}+(?:-\p{L}+)*/gu;
 const NON_ASCII = /[^\x00-\x7F]/;
+const COMBINING_MARKS = /\p{M}/gu;
 const MIN_LENGTH = 3;
 const MAX_SENTENCE_LENGTH = 300;
 // 학술 핵심어 예외는 상위 2,000위 밖에만 적용한다. 그 안의 AWL 단어(area, data, code)는 쉽다.
@@ -62,56 +63,73 @@ function compareByCountThenLemma(a: Candidate, b: Candidate): number {
   return b.count - a.count || (a.lemma < b.lemma ? -1 : a.lemma > b.lemma ? 1 : 0);
 }
 
-// 원형 처리기가 못 바꾼 복수형(datasets)을 같은 문서의 단수형 후보(dataset)에 합친다.
-function mergePlurals(tallies: Tally[]): Tally[] {
-  const byLemma = new Map(tallies.map((t) => [t.lemma, t]));
-  const merged: Tally[] = [];
-  for (const t of tallies) {
-    const singular =
-      t.lemma.endsWith('s') && !t.lemma.endsWith('ss') ? byLemma.get(t.lemma.slice(0, -1)) : undefined;
-    if (singular) singular.count += t.count;
-    else merged.push(t);
-  }
-  return merged;
+// 발음 구별 기호를 뗀다: naïve → naive, café → cafe. Łukasz의 Ł처럼 떼어지지 않는 글자는 남는다.
+function stripDiacritics(token: string): string {
+  return token.normalize('NFD').replace(COMBINING_MARKS, '');
+}
+
+// 복수형 어미에 맞는 단수형 후보를 가능성이 큰 순서로 돌려준다: nonlinearities → nonlinearity, softmaxes → softmax,
+// datasets → dataset. 끝의 s만 떼면 nonlinearitie, softmaxe처럼 없는 형태가 나온다.
+function singularCandidates(lemma: string): string[] {
+  if (lemma.endsWith('ies')) return [lemma.slice(0, -3) + 'y', lemma.slice(0, -1)];
+  if (/(?:x|ch|sh|z)es$/.test(lemma)) return [lemma.slice(0, -2), lemma.slice(0, -1)];
+  return [lemma.slice(0, -1)];
+}
+
+// 원형 처리기가 못 바꾼 복수형(datasets, logits, hyperparameters)을 단수형으로 돌린다.
+// 그대로 두는 것: -ss·-us·-is로 끝나는 단어(glass, softplus, axis), 사전에 있는 단어(lens, bias, series),
+// 빈도표에는 있는데 단수형은 없는 단어(whereas → wherea는 없다. 학술어 예외도 이 형태로 받는다).
+// 단수형 후보 중 사전이 아는 것을 먼저 쓰고(databases → database), 없으면 어미 규칙의 첫 후보를 쓴다.
+// 단어마다 처리하므로 단수형이 아는 단어거나 흔한 단어면 원래 규칙대로 함께 빠진다.
+function singularize(lemma: string, opts: ExtractOptions): string {
+  if (!lemma.endsWith('s') || /(?:ss|us|is)$/.test(lemma) || opts.inDictionary(lemma)) return lemma;
+  const candidates = singularCandidates(lemma).filter((c) => c.length >= MIN_LENGTH);
+  const singular = candidates.find((c) => opts.inDictionary(c)) ?? candidates[0];
+  if (singular === undefined) return lemma;
+  if (opts.rankOf(lemma) !== undefined && opts.rankOf(singular) === undefined) return lemma;
+  return singular;
 }
 
 export function extractCandidates(sentences: string[], opts: ExtractOptions): Candidate[] {
   const tallies = new Map<string, Tally>();
 
-  for (const sentence of sentences) {
+  for (const raw of sentences) {
+    // 조합형(i + ̈)으로 들어온 글자를 한 글자로 모은다. 그러지 않으면 TOKEN이 naïve를 두 조각으로 자른다.
+    const sentence = raw.normalize('NFC');
     let position = 0;
     for (const match of sentence.matchAll(TOKEN)) {
       const token = match[0];
       const isFirst = position++ === 0;
       if (token.includes('-') || token.length < MIN_LENGTH) continue;
-      if (NON_ASCII.test(token)) continue; // Łukasz → ukasz 같은 조각 방지
+      const folded = stripDiacritics(token);
+      if (NON_ASCII.test(folded)) continue; // Łukasz → ukasz 같은 조각 방지
       if (token === token.toUpperCase()) continue; // 약어: CNN, BERT
-      const lower = token.toLowerCase();
+      const lower = folded.toLowerCase();
       const lemma = lemmatize(lower);
-      if (isExcludedByRank(lower, lemma, opts) || opts.knownLemmas.has(lemma)) continue;
+      const base = lemma === lower ? singularize(lemma, opts) : lemma;
+      if (isExcludedByRank(lower, base, opts) || opts.knownLemmas.has(base)) continue;
 
-      let tally = tallies.get(lemma);
+      let tally = tallies.get(base);
       if (!tally) {
         tally = {
-          lemma,
-          surface: lower,
+          lemma: base,
+          // 표면형은 문장에 적힌 그대로(naïve). 형광펜이 문장에서 이 글자를 찾는다.
+          surface: token.toLowerCase(),
           sentence: truncateAround(sentence, match.index, token.length),
           count: 0,
           seenLowercase: false,
           seenCapitalizedMidSentence: false,
         };
-        tallies.set(lemma, tally);
+        tallies.set(base, tally);
       }
       tally.count++;
-      if (token === lower) tally.seenLowercase = true;
+      if (token === token.toLowerCase()) tally.seenLowercase = true;
       else if (!isFirst) tally.seenCapitalizedMidSentence = true;
     }
   }
 
-  const kept = [...tallies.values()].filter(
-    (t) => t.seenLowercase || !t.seenCapitalizedMidSentence, // 고유명사 제외
-  );
-  return mergePlurals(kept)
+  return [...tallies.values()]
+    .filter((t) => t.seenLowercase || !t.seenCapitalizedMidSentence) // 고유명사 제외
     .map((t) => ({
       lemma: t.lemma,
       surface: t.surface,

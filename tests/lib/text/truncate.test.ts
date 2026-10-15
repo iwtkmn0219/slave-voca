@@ -14,6 +14,12 @@ describe("cutAround", () => {
     expect(cut).toContain('TARGET');
   });
 
+  it('never cuts the word itself, even when max is close to its length', () => {
+    const sentence = `${words(10, 'alpha')} TARGETWORD ${words(10, 'omega')}`;
+    const cut = cutAround(sentence, sentence.indexOf('TARGETWORD'), 10, 11);
+    expect(cut).toContain('TARGETWORD');
+  });
+
   it('keeps the start when the word is near the beginning', () => {
     const sentence = `We TARGET ${words(40, 'omega')}`;
     const cut = cutAround(sentence, 3, 6, 50);

@@ -63,6 +63,15 @@ function UndoControl({
         </span>
       )}
       {note?.kind === "failed" && <Failed>{note.text}</Failed>}
+      {/* 일시적 실패는 대상이 남아 있다: Z뿐 아니라 버튼으로도 다시 시도할 수 있게 한다 */}
+      {note?.kind === "failed" && last && (
+        <>
+          <span aria-hidden>·</span>
+          <button type="button" onMouseDown={keepFocus} onClick={onUndo} disabled={busy} className={undoButtonClass}>
+            다시 시도
+          </button>
+        </>
+      )}
       {last && answer && !note && (
         <>
           <Kbd>Z</Kbd>
@@ -176,7 +185,8 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
 
   // 뒷면 열기. 발음 자동 재생이 켜져 있으면 단어를 한 번 읽는다(설정 화면).
   const reveal = () => {
-    if (!card || revealed) return;
+    // 저장·되돌리기 처리 중에는 열지 않는다(키보드는 이미 막혀 있고, 버튼 클릭도 같게 한다).
+    if (!card || revealed || locked.current) return;
     setRevealed(true);
     if (autoSpeak) speak(card.lemma);
   };

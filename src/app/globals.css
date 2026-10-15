@@ -1,85 +1,43 @@
 @import "tailwindcss";
 
 /* 디자인 토큰: docs/superpowers/specs/2026-10-15-ui-redesign.md 3장 (A안 「지면」).
-   컴포넌트는 dark: 변형을 쓰지 않고 이 변수만 쓴다. 테마는 변수 값만 바꾼다. */
+   컴포넌트는 dark: 변형을 쓰지 않고 이 변수만 쓴다. 각 색은 light-dark(라이트, 다크)로 한 번만 적는다.
+   어느 쪽을 쓸지는 color-scheme이 정한다: 기본은 OS 설정, 설정 화면에서 고른 테마는 <html data-theme>. */
 :root {
-  --bg: #f4f1ea;
-  --surface: #fbfaf7;
-  --sunken: #eeeae1;
-  --line: #e2ddd2;
-  --line-strong: #cec7b8;
-  --ink: #22201c;
-  --ink-2: #4a463f;
-  --muted: #6e685e;
-  --faint: #857e72;
-  --accent: #2f5d8c;
-  --accent-hover: #264d75;
-  --accent-soft: #e6edf5;
-  --on-accent: #ffffff;
-  --mark: #f0db8c;
-  --again: #a6463b;
-  --again-soft: #f5e3df;
-  --hard: #7f5a0c;
-  --hard-soft: #f3e9d0;
-  --good: #3b7150;
-  --good-soft: #e0eee4;
-  --shadow-1: 0 1px 2px rgb(34 32 28 / 0.06), 0 1px 1px rgb(34 32 28 / 0.04);
-  --shadow-2: 0 4px 16px rgb(34 32 28 / 0.08), 0 1px 3px rgb(34 32 28 / 0.06);
+  color-scheme: light dark;
+  --bg: light-dark(#f4f1ea, #171614);
+  --surface: light-dark(#fbfaf7, #1f1e1b);
+  --sunken: light-dark(#eeeae1, #141311);
+  --line: light-dark(#e2ddd2, #2f2d29);
+  --line-strong: light-dark(#cec7b8, #403d37);
+  --ink: light-dark(#22201c, #ece7dd);
+  --ink-2: light-dark(#4a463f, #cfc9bd);
+  --muted: light-dark(#6e685e, #a29b8e);
+  --faint: light-dark(#857e72, #807a70);
+  --accent: light-dark(#2f5d8c, #8db4de);
+  --accent-hover: light-dark(#264d75, #a7c6e8);
+  --accent-soft: light-dark(#e6edf5, #223041);
+  --on-accent: light-dark(#ffffff, #10161e);
+  --mark: light-dark(#f0db8c, rgb(222 178 64 / 0.32));
+  --again: light-dark(#a6463b, #e08a7e);
+  --again-soft: light-dark(#f5e3df, #3a2421);
+  --hard: light-dark(#7f5a0c, #d9b45e);
+  --hard-soft: light-dark(#f3e9d0, #352b16);
+  --good: light-dark(#3b7150, #8cc79c);
+  --good-soft: light-dark(#e0eee4, #1e3225);
+  /* 그림자는 모양이 테마마다 달라, 쓰지 않는 쪽 층을 투명으로 둔다(라이트 2층, 다크 1층) */
+  --shadow-1:
+    0 1px 2px light-dark(rgb(34 32 28 / 0.06), rgb(0 0 0 / 0.4)), 0 1px 1px light-dark(rgb(34 32 28 / 0.04), transparent);
+  --shadow-2:
+    0 4px 16px light-dark(rgb(34 32 28 / 0.08), transparent), 0 1px 3px light-dark(rgb(34 32 28 / 0.06), transparent),
+    0 6px 20px light-dark(transparent, rgb(0 0 0 / 0.45));
+}
+
+:root[data-theme="light"] {
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #171614;
-    --surface: #1f1e1b;
-    --sunken: #141311;
-    --line: #2f2d29;
-    --line-strong: #403d37;
-    --ink: #ece7dd;
-    --ink-2: #cfc9bd;
-    --muted: #a29b8e;
-    --faint: #807a70;
-    --accent: #8db4de;
-    --accent-hover: #a7c6e8;
-    --accent-soft: #223041;
-    --on-accent: #10161e;
-    --mark: rgb(222 178 64 / 0.32);
-    --again: #e08a7e;
-    --again-soft: #3a2421;
-    --hard: #d9b45e;
-    --hard-soft: #352b16;
-    --good: #8cc79c;
-    --good-soft: #1e3225;
-    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-2: 0 6px 20px rgb(0 0 0 / 0.45);
-    color-scheme: dark;
-  }
-}
-
-/* M4 설정 화면의 테마 선택용. 위 다크 값과 같다. */
 :root[data-theme="dark"] {
-  --bg: #171614;
-  --surface: #1f1e1b;
-  --sunken: #141311;
-  --line: #2f2d29;
-  --line-strong: #403d37;
-  --ink: #ece7dd;
-  --ink-2: #cfc9bd;
-  --muted: #a29b8e;
-  --faint: #807a70;
-  --accent: #8db4de;
-  --accent-hover: #a7c6e8;
-  --accent-soft: #223041;
-  --on-accent: #10161e;
-  --mark: rgb(222 178 64 / 0.32);
-  --again: #e08a7e;
-  --again-soft: #3a2421;
-  --hard: #d9b45e;
-  --hard-soft: #352b16;
-  --good: #8cc79c;
-  --good-soft: #1e3225;
-  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-2: 0 6px 20px rgb(0 0 0 / 0.45);
   color-scheme: dark;
 }
 
