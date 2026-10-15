@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { arpabetToIpa } from '@/lib/phonetic/arpabet';
-import { cmudictLookup, createCmudict, withCmudictFallback } from '@/lib/phonetic/cmudict';
+import { cmudictLookup, createCmudict, withCmudictFirst } from '@/lib/phonetic/cmudict';
 
 describe('arpabetToIpa', () => {
   it('converts phones and marks stress before the onset consonant', () => {
@@ -48,22 +48,27 @@ describe('cmudictLookup', () => {
   });
 });
 
-describe('withCmudictFallback', () => {
-  it('prefers the API result and falls back when it is null', async () => {
-    const api = async (w: string) => (w === 'robust' ? '/rəʊˈbʌst/' : null);
-    const lookup = withCmudictFallback(api, (w) => (w === 'paradigm' ? '/ˈpɛrəˌdaɪm/' : null));
-    expect(await lookup('robust')).toBe('/rəʊˈbʌst/');
-    expect(await lookup('paradigm')).toBe('/ˈpɛrəˌdaɪm/');
+describe('withCmudictFirst', () => {
+  it('uses CMUdict first and only calls the API when CMUdict has nothing', async () => {
+    const asked: string[] = [];
+    const api = async (w: string) => {
+      asked.push(w);
+      return w === 'dmodel' ? null : '/api/';
+    };
+    const lookup = withCmudictFirst(api, (w) => (w === 'robust' ? '/roʊˈbʌst/' : null));
+    expect(await lookup('robust')).toBe('/roʊˈbʌst/');
+    expect(await lookup('softmax')).toBe('/api/');
     expect(await lookup('dmodel')).toBeNull();
+    expect(asked).toEqual(['softmax', 'dmodel']);
   });
 
-  it('returns null and logs once when the fallback itself fails', async () => {
+  it('falls back to the API and logs once when CMUdict itself fails', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const lookup = withCmudictFallback(async () => null, () => {
+    const lookup = withCmudictFirst(async () => '/api/', () => {
       throw new Error('cmudict.txt not found');
     });
-    expect(await lookup('robust')).toBeNull();
-    expect(await lookup('paradigm')).toBeNull();
+    expect(await lookup('robust')).toBe('/api/');
+    expect(await lookup('paradigm')).toBe('/api/');
     expect(errors).toHaveBeenCalledTimes(1);
     errors.mockRestore();
   });

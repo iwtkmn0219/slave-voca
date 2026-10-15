@@ -26,3 +26,8 @@ export function isNativeSpaceTarget(target: KeyTarget | null): boolean {
   if (tag === 'BUTTON') return true;
   return tag === 'INPUT' && NON_TEXT_INPUTS.has((target?.type ?? '').toLowerCase());
 }
+
+// Enter는 포커스된 버튼·링크·체크박스를 브라우저가 누른다. 그 위에서는 Enter 단축키를 쓰지 않는다.
+export function isNativeEnterTarget(target: KeyTarget | null): boolean {
+  return target?.tagName?.toUpperCase() === 'A' || isNativeSpaceTarget(target);
+}
