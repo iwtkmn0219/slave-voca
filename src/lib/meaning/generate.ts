@@ -12,7 +12,8 @@ export interface MeaningResult {
 // 단어 묶음 하나를 받아 문맥 뜻을 돌려주는 모델. 실제 구현은 gemini.ts, 테스트는 가짜를 쓴다.
 export type MeaningModel = (batch: MeaningRequest[]) => Promise<MeaningResult[]>;
 
-export const MEANING_BATCH_SIZE = 50;
+// 무료 등급 한도(모델별 분당 5요청) 때문에 크게 묶는다: 논문 한 편(후보 약 200개)이 요청 1~2개로 끝난다.
+export const MEANING_BATCH_SIZE = 200;
 
 export interface GenerateOutcome {
   done: MeaningResult[];
@@ -63,7 +64,7 @@ async function requestWithRetry(
   }
 }
 
-// 50개씩 나눠 요청한다. 응답에 빠졌거나 빈 뜻, 재시도해도 실패한 묶음은 failedIds로 돌려준다.
+// MEANING_BATCH_SIZE개씩 나눠 요청한다. 응답에 빠졌거나 빈 뜻, 재시도해도 실패한 묶음은 failedIds로 돌려준다.
 export async function generateMeanings(
   requests: MeaningRequest[],
   model: MeaningModel,

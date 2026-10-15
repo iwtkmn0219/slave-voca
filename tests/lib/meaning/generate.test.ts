@@ -14,16 +14,16 @@ const echoModel: MeaningModel = async (batch) =>
   batch.map((r) => ({ id: r.id, meaningKo: `뜻${r.id}` }));
 
 describe('generateMeanings', () => {
-  it('sends batches of 50 and collects every meaning', async () => {
+  it('sends batches of 200 and collects every meaning', async () => {
     const sizes: number[] = [];
     const model: MeaningModel = async (batch) => {
       sizes.push(batch.length);
       return echoModel(batch);
     };
-    const outcome = await generateMeanings(requests(120), model);
-    expect(MEANING_BATCH_SIZE).toBe(50);
-    expect(sizes).toEqual([50, 50, 20]);
-    expect(outcome.done).toHaveLength(120);
+    const outcome = await generateMeanings(requests(450), model);
+    expect(MEANING_BATCH_SIZE).toBe(200);
+    expect(sizes).toEqual([200, 200, 50]);
+    expect(outcome.done).toHaveLength(450);
     expect(outcome.failedIds).toEqual([]);
   });
 
@@ -45,9 +45,9 @@ describe('generateMeanings', () => {
       if (call === 1) throw new Error('rate limited');
       return echoModel(batch);
     };
-    const outcome = await generateMeanings(requests(60), model);
-    expect(outcome.failedIds).toHaveLength(50);
-    expect(outcome.done.map((d) => d.id)).toEqual(Array.from({ length: 10 }, (_, i) => 51 + i));
+    const outcome = await generateMeanings(requests(210), model);
+    expect(outcome.failedIds).toHaveLength(200);
+    expect(outcome.done.map((d) => d.id)).toEqual(Array.from({ length: 10 }, (_, i) => 201 + i));
   });
 
   it('does nothing for an empty request list', async () => {
@@ -94,9 +94,9 @@ describe('generateMeanings retries', () => {
       }
       return echoModel(batch);
     };
-    const outcome = await generateMeanings(requests(60), model, h.options);
+    const outcome = await generateMeanings(requests(210), model, h.options);
     expect(firstBatchCalls).toBe(4);
-    expect(outcome.failedIds).toHaveLength(50);
+    expect(outcome.failedIds).toHaveLength(200);
     expect(outcome.done).toHaveLength(10);
     expect(h.waits).toEqual([1000, 2000, 4000]);
     h.restore();
