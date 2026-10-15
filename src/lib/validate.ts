@@ -9,3 +9,9 @@ export function parseIdList(value: unknown): number[] | null {
   if (!Array.isArray(value) || !value.every(isId)) return null;
   return [...new Set(value)];
 }
+
+// Content-Type이 정확히 application/json인지. 매개변수(charset 등)는 허용하지만 "text/plain; x=application/json"처럼
+// 매개변수에 json이 들어 있는 값은 거른다. text/plain·form 형식은 다른 사이트가 사전 확인(preflight) 없이 보낼 수 있다.
+export function isJsonContentType(value: string | null): boolean {
+  return value?.split(';')[0].trim().toLowerCase() === 'application/json';
+}
