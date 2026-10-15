@@ -19,6 +19,7 @@ export default function StudyPage() {
 async function TodayQueue() {
   await connection();
   const db = getDb();
-  const cards = getStudyQueue(db, new Date(), getSettings(db).dailyNewLimit);
-  return <StudySession cards={cards} />;
+  const settings = getSettings(db);
+  const cards = getStudyQueue(db, new Date(), settings.dailyNewLimit);
+  return <StudySession cards={cards} autoSpeak={settings.autoSpeak} />;
 }
