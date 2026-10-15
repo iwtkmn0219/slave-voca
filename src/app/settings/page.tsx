@@ -1,0 +1,25 @@
+import { cookies } from "next/headers";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { isTheme, THEME_COOKIE } from "@/lib/settings";
+import { getDb } from "@/server/db/client";
+import { getSettings } from "@/server/repo/settings";
+import { SettingsForm } from "./settings-form";
+
+export default function SettingsPage() {
+  return (
+    <main className="mx-auto w-full max-w-[760px] px-4 pt-8 pb-12">
+      <h1 className="text-[26px] font-bold">설정</h1>
+      <Suspense fallback={<p className="mt-6 text-muted">불러오는 중…</p>}>
+        <CurrentSettings />
+      </Suspense>
+    </main>
+  );
+}
+
+async function CurrentSettings() {
+  await connection();
+  const settings = getSettings(getDb());
+  const stored = (await cookies()).get(THEME_COOKIE)?.value;
+  return <SettingsForm initial={{ ...settings, theme: isTheme(stored) ? stored : "system" }} />;
+}

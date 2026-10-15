@@ -2,6 +2,7 @@
 
 import { useActionState, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { buttonClass } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { Spinner } from "@/components/ui/status";
 import { pdfSizeError } from "@/lib/upload/limits";
 import { uploadDocument, type UploadState } from "./actions";
@@ -78,18 +79,7 @@ export function UploadForm() {
             className="sr-only"
           />
         </label>
-        <fieldset className="inline-flex overflow-hidden rounded-md border border-line-strong">
-          <legend className="sr-only">종류</legend>
-          {KINDS.map((k) => (
-            <label
-              key={k.value}
-              className="cursor-pointer px-3 py-1.5 text-[13px] text-ink-2 has-checked:bg-ink has-checked:font-semibold has-checked:text-surface has-focus-visible:outline-2 has-focus-visible:outline-accent"
-            >
-              <input type="radio" name="kind" value={k.value} defaultChecked={k.value === "paper"} className="sr-only" />
-              {k.label}
-            </label>
-          ))}
-        </fieldset>
+        <Segmented name="kind" legend="종류" options={KINDS} defaultValue="paper" />
         <input
           type="text"
           name="title"

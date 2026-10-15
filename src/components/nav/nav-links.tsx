@@ -7,6 +7,8 @@ const LINKS = [
   { href: "/", label: "홈", match: (p: string) => p === "/" },
   { href: "/study", label: "복습", match: (p: string) => p.startsWith("/study") },
   { href: "/documents", label: "문서", match: (p: string) => p.startsWith("/documents") },
+  // 설정은 상단 바 오른쪽 끝(개편안 5장)
+  { href: "/settings", label: "설정", match: (p: string) => p.startsWith("/settings") },
 ];
 
 function Links({ pathname, studyBadge }: { pathname: string | null; studyBadge: React.ReactNode }) {
@@ -20,6 +22,8 @@ function Links({ pathname, studyBadge }: { pathname: string | null; studyBadge: 
             href={link.href}
             aria-current={active ? "page" : undefined}
             className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${
+              link.href === "/settings" ? "ml-auto" : ""
+            } ${
               active ? "bg-sunken font-semibold text-ink" : "text-ink-2 hover:bg-sunken"
             }`}
           >
