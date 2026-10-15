@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '@/server/db/client';
 import { knownWords, occurrences, words } from '@/server/db/schema';
 import {
+  countFailedMeaningsByDocument,
   countOccurrencesByDocument,
   listMeaningRequests,
   listOccurrencesByDocument,
@@ -126,6 +127,15 @@ describe('meaning and phonetic updates', () => {
     saveReviewSelection(db, doc.id, [...ids.values()]);
     expect(countOccurrencesByDocument(db).get(doc.id)).toBe(2);
   });
+
+  it('counts failed meanings per document', () => {
+    const { doc, ids } = reviewingDocument([candidate('robust'), candidate('paradigm')]);
+    const saved = saveReviewSelection(db, doc.id, [...ids.values()]);
+    markMeaningsFailed(db, saved.occurrenceIds.slice(0, 1));
+    expect(countFailedMeaningsByDocument(db).get(doc.id)).toBe(1);
+    expect(countFailedMeaningsByDocument(db).get(doc.id + 1)).toBeUndefined();
+  });
+
 
   it('returns empty lists for empty id lists', () => {
     expect(listMeaningRequests(db, [])).toEqual([]);

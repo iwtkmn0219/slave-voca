@@ -41,6 +41,8 @@ describe('getStudyQueue', () => {
     const queue = getStudyQueue(db, now, 2);
     expect(queue.map((c) => c.lemma)).toEqual(['alpha', 'beta']);
     expect(queue.every((c) => c.isNew)).toBe(true);
+    expect(queue[0].intervals.again).toBeLessThanOrEqual(queue[0].intervals.good);
+    expect(queue[0].intervals.good).toBeGreaterThan(0);
   });
 
   it('counts new cards already introduced today against the limit', () => {
@@ -107,6 +109,7 @@ describe('recordAnswer', () => {
     saveCards('A', ['alpha']);
     const id = wordId('alpha');
     const first = recordAnswer(db, id, 'good', now);
+    expect(first.intervals.good).toBeGreaterThan(0);
     const later = new Date(now.getTime() + 2 * HOUR);
     recordAnswer(db, id, 'hard', later);
 

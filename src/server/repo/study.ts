@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
+import { previewIntervals, type Intervals } from '@/lib/srs/interval';
 import {
   ANSWER_GRADE,
   applyAnswer,
@@ -33,6 +34,7 @@ export interface StudyCard {
   phonetic: string | null;
   isNew: boolean;
   usages: Usage[]; // 최신 용례부터 최대 2개
+  intervals: Intervals; // 응답별 다음 복습까지(ms). 답 버튼에 보여 준다
 }
 
 function countIntroducedToday(db: Db, now: Date): number {
@@ -100,6 +102,7 @@ export function getStudyQueue(db: Db, now: Date, dailyNewLimit: number): StudyCa
     phonetic: w.phonetic,
     isNew: w.state === NEW_STATE,
     usages: usages.get(w.id) ?? [],
+    intervals: previewIntervals(w, now),
   }));
 }
 
@@ -121,7 +124,13 @@ export function countStudyToday(
 }
 
 // 응답을 기록하고 다음 복습 일정을 저장한다. 새 카드는 처음 응답한 시각을 introducedAt으로 남긴다.
-export function recordAnswer(db: Db, wordId: number, answer: Answer, now: Date): { due: Date } {
+// 돌려주는 intervals는 응답 뒤 상태 기준 미리보기다. "모름"으로 세션 뒤에 다시 넣는 카드의 답 버튼을 갱신할 때 쓴다.
+export function recordAnswer(
+  db: Db,
+  wordId: number,
+  answer: Answer,
+  now: Date,
+): { due: Date; intervals: Intervals } {
   return db.transaction((tx) => {
     const word = tx.select().from(words).where(eq(words.id, wordId)).get();
     if (!word) throw new StudyError('카드를 찾을 수 없습니다.');
@@ -131,6 +140,6 @@ export function recordAnswer(db: Db, wordId: number, answer: Answer, now: Date):
       .where(eq(words.id, wordId))
       .run();
     tx.insert(reviewLogs).values({ wordId, rating: ANSWER_GRADE[answer], reviewedAt: now }).run();
-    return { due: next.due };
+    return { due: next.due, intervals: previewIntervals(next, now) };
   });
 }
