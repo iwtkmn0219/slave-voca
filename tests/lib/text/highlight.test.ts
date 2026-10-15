@@ -11,6 +11,16 @@ describe('highlight', () => {
     ]);
   });
 
+  it('marks words with diacritics as whole words', () => {
+    expect(highlight('A naïve Naïve baseline, not naïveté.', 'naïve')).toEqual([
+      { text: 'A ', match: false },
+      { text: 'naïve', match: true },
+      { text: ' ', match: false },
+      { text: 'Naïve', match: true },
+      { text: ' baseline, not naïveté.', match: false },
+    ]);
+  });
+
   it('does not mark the word inside a longer word', () => {
     expect(highlight('A robustness check.', 'robust')).toEqual([
       { text: 'A robustness check.', match: false },

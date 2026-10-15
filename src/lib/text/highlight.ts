@@ -3,8 +3,9 @@ export interface Segment {
   match: boolean;
 }
 
+// 단어 경계는 \b 대신 앞뒤 글자 검사로 본다. \b는 ASCII 기준이라 naïve의 ï를 경계로 잘못 본다.
 const wordPattern = (word: string, flags: string) =>
-  new RegExp(`\\b(${word.replace(/[^A-Za-z-]/g, '')})\\b`, flags);
+  new RegExp(`(?<![\\p{L}\\p{N}_])(${word.replace(/[^\p{L}-]/gu, '')})(?![\\p{L}\\p{N}_])`, `${flags}u`);
 
 // 문장에서 word와 같은 단어(대소문자 무시)를 표시용 조각으로 나눈다.
 export function highlight(sentence: string, word: string): Segment[] {
