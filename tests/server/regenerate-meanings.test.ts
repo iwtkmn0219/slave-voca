@@ -45,6 +45,18 @@ describe('regenerateMeanings', () => {
     expect(listOccurrencesByDocument(db, doc.id)[0]).toMatchObject({ meaningKo: '수열', meaningStatus: 'done' });
   });
 
+  it('does not turn a meaning that another request stored meanwhile into failed', async () => {
+    // 같은 용례를 두 요청(탭 두 개)이 다시 만들 때: 하나가 성공해 done이 된 뒤 늦게 끝난 요청이 실패해도 done을 지우지 않는다.
+    const { doc, saved } = failedDocument(['progression']);
+    const id = saved.occurrenceIds[0];
+    const slowFailing: MeaningModel = async () => {
+      setMeanings(db, [{ id, meaningKo: '수열' }]); // 다른 요청이 그 사이 성공
+      throw new Error('503');
+    };
+    await regenerateMeanings(db, saved.occurrenceIds, slowFailing); // Error('503')에는 상태가 없어 재시도하지 않는다
+    expect(listOccurrencesByDocument(db, doc.id)[0]).toMatchObject({ meaningKo: '수열', meaningStatus: 'done' });
+  });
+
   it('keeps an existing meaning when regenerating it fails', async () => {
     const { doc, saved } = failedDocument(['progression']);
     setMeanings(db, [{ id: saved.occurrenceIds[0], meaningKo: '진행' }]);

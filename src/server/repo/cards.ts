@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull, ne } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import {
   candidates,
@@ -106,6 +106,15 @@ export function markMeaningsFailed(db: Db, occurrenceIds: readonly number[]): vo
   db.update(occurrences)
     .set({ meaningStatus: 'failed' })
     .where(inArray(occurrences.id, [...occurrenceIds]))
+    .run();
+}
+
+// 뜻을 만들다 실패한 용례를 failed로 바꾼다. 그 사이 다른 요청(탭 두 개 등)이 성공해 done이 된 용례는 건드리지 않는다.
+export function markMeaningsFailedUnlessDone(db: Db, occurrenceIds: readonly number[]): void {
+  if (occurrenceIds.length === 0) return;
+  db.update(occurrences)
+    .set({ meaningStatus: 'failed' })
+    .where(and(inArray(occurrences.id, [...occurrenceIds]), ne(occurrences.meaningStatus, 'done')))
     .run();
 }
 

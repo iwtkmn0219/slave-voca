@@ -8,6 +8,7 @@ import {
   listMeaningRequests,
   listWordsMissingPhonetic,
   markMeaningsFailed,
+  markMeaningsFailedUnlessDone,
   markPendingMeaningsFailed,
   setMeanings,
   setPhonetic,
@@ -47,7 +48,8 @@ async function generateAndStore(db: Db, occurrenceIds: readonly number[], model:
     model,
   );
   setMeanings(db, outcome.done);
-  markMeaningsFailed(db, outcome.failedIds.filter((id) => !hadMeaning.has(id)));
+  // 이미 뜻이 있던 용례는 그대로 두고, 그 사이 다른 요청이 done으로 만든 용례도 failed로 덮지 않는다.
+  markMeaningsFailedUnlessDone(db, outcome.failedIds.filter((id) => !hadMeaning.has(id)));
   return { done: outcome.done.length, failed: outcome.failedIds.length };
 }
 
