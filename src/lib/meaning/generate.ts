@@ -23,11 +23,15 @@ export interface GenerateOutcome {
 // 일시적인 오류만 다시 시도한다: 429(요청 한도), 5xx(서버 과부하 등), 상태 없는 네트워크 오류.
 // 400·401·403·404처럼 키·요청·모델이 틀린 오류와, 응답 형식 오류(JSON·스키마·차단)는 다시 보내도 같으므로 제외한다.
 // 상태 코드는 @google/genai ApiError.status를 이름으로 읽어 이 모듈이 SDK에 묶이지 않게 한다.
+// 예외: GarbledOutputError(형식은 맞는데 뜻 글자가 낱자모로 깨진 응답)는 형식 오류지만 다시 요청하면
+// 정상으로 오는 경우가 있어 재시도한다. 모델 구현(gemini.ts)에 묶이지 않도록 이름으로 알아본다.
 const NETWORK_ERROR_NAMES = new Set(['AbortError', 'TimeoutError']);
+const GARBLED_OUTPUT_ERROR = 'GarbledOutputError';
 
 export function isRetryableError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const { status, name, cause } = err as { status?: unknown; name?: unknown; cause?: unknown };
+  if (name === GARBLED_OUTPUT_ERROR) return true;
   if (typeof status === 'number') return status === 429 || status >= 500;
   if (err instanceof TypeError) return true; // fetch failed
   if (typeof name === 'string' && NETWORK_ERROR_NAMES.has(name)) return true;
@@ -56,8 +60,12 @@ async function requestWithRetry(
     try {
       return await model(batch);
     } catch (err) {
+      const { name, garbledCount } = err as { name?: unknown; garbledCount?: unknown };
+      if (name === GARBLED_OUTPUT_ERROR) {
+        console.warn(`문맥 뜻 깨진 글자: 묶음 ${batchNo}, 깨진 항목 ${garbledCount}개`);
+      }
       if (attempt >= RETRY_DELAYS_MS.length || !isRetryable(err)) throw err;
-      const status = (err as { status?: unknown }).status ?? 'network';
+      const status = (err as { status?: unknown }).status ?? (name === GARBLED_OUTPUT_ERROR ? 'garbled' : 'network');
       console.warn(`문맥 뜻 재시도: 묶음 ${batchNo}, 상태 ${status}, ${attempt + 1}/${RETRY_DELAYS_MS.length}회`);
       await sleep(RETRY_DELAYS_MS[attempt] * (1 + RETRY_JITTER * (2 * random() - 1)));
     }

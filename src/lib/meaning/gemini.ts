@@ -4,11 +4,17 @@ import type { MeaningModel } from './generate';
 
 export const MEANING_MODEL_ID = 'gemini-3.5-flash-lite';
 
+// 2026-10-16 실측(attention 200개 묶음)에서 기존 지시보다 문맥 오답이 적었던 B1 지시. 예시(few-shot)는
+// 특정 단어 해석을 한쪽으로 끌고 가는 부작용이 있어 넣지 않는다.
 const SYSTEM_INSTRUCTION = [
-  '너는 영어 논문·발표 자료를 읽는 한국인 학습자를 돕는다.',
+  '너는 영어 학술 논문·발표 자료를 읽는 한국인 연구자를 돕는다.',
   '각 항목의 word가 sentence 안에서 쓰인 의미를 한국어로 짧게(2~15자) 답한다.',
-  '사전의 첫 뜻이 아니라 그 문장 속 의미를 쓰고, 품사에 맞게 쓴다(동사는 "~하다", 형용사는 "~한").',
-  '모든 id에 하나씩 답한다.',
+  '규칙:',
+  '1. 사전의 첫 뜻이 아니라 그 문장 속 의미를 쓴다.',
+  '2. 학술 논문 문맥이다. 한국어 학술 글에서 관용적으로 쓰는 전문 용어가 있으면 그것을 쓴다. 일상어 뜻을 쓰지 않는다.',
+  '3. word가 여러 단어로 된 용어나 굳은 표현(연어)의 일부이면, 그 표현 전체가 뜻하는 바를 기준으로 답한다.',
+  '4. 품사에 맞게 쓴다(동사는 "~하다", 형용사는 "~한"). 명사가 형용사처럼 앞 단어를 꾸미면 그 용어 안의 뜻으로 쓴다.',
+  '5. 모든 id에 하나씩 답한다.',
 ].join('\n');
 
 // Gemini 구조화 출력용 JSON Schema. 응답은 아래 zod 스키마로 한 번 더 검증한다.
@@ -32,6 +38,18 @@ const OutputSchema = z.object({
 });
 
 export type GeminiClient = Pick<GoogleGenAI, 'models'>;
+
+// 한글 낱자모: 첫가끝 자모(U+1100–11FF)와 호환 자모(U+3130–318F). 정상 뜻은 완성형 음절로 온다.
+// 2026-10-16 실측에서 200개 묶음 응답이 통째로 낱자모로 깨져 온 일이 있었다(예: "머커뉴ᄆ").
+const LOOSE_JAMO = /[ᄀ-ᇿ㄰-㆏]/;
+
+// 응답 형식은 맞지만 뜻 글자가 깨진 경우. generate.ts의 재시도 판정이 이름으로 알아보고 다시 요청한다.
+export class GarbledOutputError extends Error {
+  constructor(readonly garbledCount: number) {
+    super(`뜻 글자가 깨져 왔습니다: ${garbledCount}개`);
+    this.name = 'GarbledOutputError';
+  }
+}
 
 // Gemini 3.5 Flash-Lite로 문맥 뜻을 만든다. 키는 GEMINI_API_KEY에서 읽는다(서버 전용).
 export function createGeminiMeaningModel(
@@ -57,6 +75,10 @@ export function createGeminiMeaningModel(
       throw new Error(`응답이 비었습니다: ${reason}`);
     }
     const parsed = OutputSchema.parse(JSON.parse(text));
-    return parsed.meanings.map((m) => ({ id: m.id, meaningKo: m.meaning_ko }));
+    // 분해형(NFD)으로 온 정상 음절은 완성형으로 합쳐 두고, 그래도 남는 낱자모만 깨진 것으로 본다.
+    const meanings = parsed.meanings.map((m) => ({ id: m.id, meaningKo: m.meaning_ko.normalize('NFC') }));
+    const garbled = meanings.filter((m) => LOOSE_JAMO.test(m.meaningKo)).length;
+    if (garbled > 0) throw new GarbledOutputError(garbled);
+    return meanings;
   };
 }

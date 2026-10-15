@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createGeminiMeaningModel, MEANING_MODEL_ID, type GeminiClient } from '@/lib/meaning/gemini';
+import {
+  createGeminiMeaningModel,
+  GarbledOutputError,
+  MEANING_MODEL_ID,
+  type GeminiClient,
+} from '@/lib/meaning/gemini';
 
 // models.generateContent만 흉내 내는 가짜 클라이언트. 실제 API는 호출하지 않는다.
 function fakeClient(response: { text?: string; candidates?: { finishReason?: string }[] }) {
@@ -35,6 +40,52 @@ describe('createGeminiMeaningModel', () => {
       },
     });
     expect(JSON.parse(calls[0].contents as string)).toEqual(batch);
+  });
+
+  it('tells the model it is reading academic papers and to read collocations as a whole', async () => {
+    const { client, calls } = fakeClient({
+      text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루다' }] }),
+    });
+    await createGeminiMeaningModel(client)(batch);
+    const instruction = (calls[0].config as { systemInstruction: string }).systemInstruction;
+    expect(instruction).toContain('학술 논문');
+    expect(instruction).toContain('전문 용어');
+    expect(instruction).toContain('굳은 표현');
+  });
+
+  it('rejects a response whose meanings contain loose Hangul jamo', async () => {
+    const two = [...batch, { id: 8, word: 'mechanism', sentence: 'an attention mechanism.' }];
+    const ok = fakeClient({
+      text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루다' }, { id: 8, meaning_ko: '메커니즘' }] }),
+    });
+    await expect(createGeminiMeaningModel(ok.client)(two)).resolves.toHaveLength(2);
+
+    // 분해형(NFD)으로 온 정상 한글은 깨진 것이 아니다. 저장할 때는 완성형(NFC)으로 바꾼다.
+    const decomposed = fakeClient({
+      text: JSON.stringify({
+        meanings: [{ id: 7, meaning_ko: '다루다'.normalize('NFD') }, { id: 8, meaning_ko: '메커니즘'.normalize('NFD') }],
+      }),
+    });
+    await expect(createGeminiMeaningModel(decomposed.client)(two)).resolves.toEqual([
+      { id: 7, meaningKo: '다루다' },
+      { id: 8, meaningKo: '메커니즘' },
+    ]);
+
+    // 첫가끝 자모(U+1100–11FF)로 온 깨진 응답: "머커뉴ᄆ"의 마지막 글자는 U+1106
+    const conjoining = fakeClient({
+      text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루다' }, { id: 8, meaning_ko: '머커뉴ᄆ' }] }),
+    });
+    const err = await createGeminiMeaningModel(conjoining.client)(two).catch((e) => e);
+    expect(err).toBeInstanceOf(GarbledOutputError);
+    expect(err.garbledCount).toBe(1);
+
+    // 호환 자모(U+3130–318F)
+    const compat = fakeClient({
+      text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루ㅁ' }, { id: 8, meaning_ko: 'ㅁ커니즘' }] }),
+    });
+    const err2 = await createGeminiMeaningModel(compat.client)(two).catch((e) => e);
+    expect(err2).toBeInstanceOf(GarbledOutputError);
+    expect(err2.garbledCount).toBe(2);
   });
 
   it('throws on empty, malformed or off-schema responses', async () => {
