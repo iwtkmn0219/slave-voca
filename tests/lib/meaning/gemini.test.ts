@@ -37,6 +37,17 @@ describe('createGeminiMeaningModel', () => {
     expect(JSON.parse(calls[0].contents as string)).toEqual(batch);
   });
 
+  it('tells the model it is reading academic papers and to read collocations as a whole', async () => {
+    const { client, calls } = fakeClient({
+      text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루다' }] }),
+    });
+    await createGeminiMeaningModel(client)(batch);
+    const instruction = (calls[0].config as { systemInstruction: string }).systemInstruction;
+    expect(instruction).toContain('학술 논문');
+    expect(instruction).toContain('전문 용어');
+    expect(instruction).toContain('굳은 표현');
+  });
+
   it('throws on empty, malformed or off-schema responses', async () => {
     const blocked = fakeClient({ text: undefined, candidates: [{ finishReason: 'SAFETY' }] });
     await expect(createGeminiMeaningModel(blocked.client)(batch)).rejects.toThrow('SAFETY');
