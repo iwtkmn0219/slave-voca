@@ -17,6 +17,9 @@ export function cutAround(sentence: string, index: number, length: number, max: 
     const space = sentence.lastIndexOf(' ', end);
     if (space >= index + length) end = space;
   }
+  // max가 단어 길이에 가까워도 단어는 통째로 남긴다(그만큼 max를 조금 넘을 수 있다).
+  start = Math.min(start, index);
+  end = Math.max(end, index + length);
   return (start > 0 ? '…' : '') + sentence.slice(start, end) + (end < sentence.length ? '…' : '');
 }
 

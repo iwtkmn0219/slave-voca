@@ -117,8 +117,12 @@ export function SettingsForm({ initial }: { initial: Values }) {
   const [saving, startSaving] = useTransition();
   const form = useRef<HTMLFormElement>(null);
 
+  // 저장하는 동안 입력을 바꾸면 그 값은 이번 저장에 들어가지 않았다. 그때는 "저장했습니다"를 띄우지 않는다.
+  const editedWhileSaving = useRef(false);
+
   // 입력을 바꾸면 "저장했습니다"는 사라지고, 고치기 시작한 칸의 오류 표시도 지운다.
   const edited = (field?: SettingsField) => {
+    if (saving) editedWhileSaving.current = true;
     if (outcome?.kind === "saved") setOutcome(null);
     if (field && errors[field])
       setErrors((e) => {
@@ -130,11 +134,12 @@ export function SettingsForm({ initial }: { initial: Values }) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    editedWhileSaving.current = false;
     startSaving(async () => {
       const result = await saveSettingsAction({ excludeTopN, dailyNewLimit, autoSpeak, theme });
       if (result.status === "saved") {
         setErrors({});
-        setOutcome({ kind: "saved" });
+        setOutcome(editedWhileSaving.current ? null : { kind: "saved" });
         applyTheme(theme); // 쿠키는 서버가 저장했다. 지금 화면에도 바로 적용한다
       } else if (result.status === "invalid") {
         setErrors(result.errors);
