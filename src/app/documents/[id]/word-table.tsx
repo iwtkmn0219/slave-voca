@@ -124,12 +124,12 @@ export function WordTable({ documentId, rows }: { documentId: number; rows: Word
                       {rowMessage.text}
                     </p>
                   )}
-                  {/* invisible: 자리는 늘 차지해 행 높이가 변하지 않는다. 상태가 있거나 삭제 확인 중이면 늘 보인다 */}
+                  {/* opacity-0: 자리는 늘 차지해 행 높이가 변하지 않고, invisible과 달리 Tab으로 닿는다(포커스가 들어오면 보인다). 상태가 있거나 삭제 확인 중이면 늘 보인다 */}
                   <div
                     className={`mt-1.5 flex h-5 items-center text-[13px] ${
                       regen.has(r.id) || deleting?.id === r.id
                         ? ""
-                        : "invisible group-hover:visible group-focus-within:visible"
+                        : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
                     }`}
                   >
                     <RegenSlot
