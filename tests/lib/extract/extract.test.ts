@@ -138,6 +138,17 @@ describe('extractCandidates', () => {
     expect(lemmas(['The first grows, whereas the second shrinks.'], opts)).toContain('whereas');
   });
 
+  it('turns missed -ies and -xes plurals into the right singular, not a stem without its ending', () => {
+    // Codex 리뷰: nonlinearities → nonlinearitie, softmaxes → softmaxe 같은 잘못된 원형을 만들었다.
+    const opts = options({ inDictionary: () => false });
+    expect(lemmas(['The nonlinearities and softmaxes.'], opts)).toEqual(['nonlinearity', 'softmax']);
+  });
+
+  it('prefers the singular form the dictionary knows', () => {
+    const opts = options({ inDictionary: (l) => l === 'database' || l === 'cache' });
+    expect(lemmas(['The databases and caches.'], opts)).toEqual(['cache', 'database']);
+  });
+
   it('does not strip the s of words ending in ss, us or is', () => {
     const opts = options({ inDictionary: () => false });
     expect(lemmas(['Glass, softplus and axis.'], opts)).toEqual(['axis', 'glass', 'softplus']);
