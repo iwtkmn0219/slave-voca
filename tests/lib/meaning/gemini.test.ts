@@ -60,6 +60,17 @@ describe('createGeminiMeaningModel', () => {
     });
     await expect(createGeminiMeaningModel(ok.client)(two)).resolves.toHaveLength(2);
 
+    // 분해형(NFD)으로 온 정상 한글은 깨진 것이 아니다. 저장할 때는 완성형(NFC)으로 바꾼다.
+    const decomposed = fakeClient({
+      text: JSON.stringify({
+        meanings: [{ id: 7, meaning_ko: '다루다'.normalize('NFD') }, { id: 8, meaning_ko: '메커니즘'.normalize('NFD') }],
+      }),
+    });
+    await expect(createGeminiMeaningModel(decomposed.client)(two)).resolves.toEqual([
+      { id: 7, meaningKo: '다루다' },
+      { id: 8, meaningKo: '메커니즘' },
+    ]);
+
     // 첫가끝 자모(U+1100–11FF)로 온 깨진 응답: "머커뉴ᄆ"의 마지막 글자는 U+1106
     const conjoining = fakeClient({
       text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루다' }, { id: 8, meaning_ko: '머커뉴ᄆ' }] }),

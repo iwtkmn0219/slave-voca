@@ -75,8 +75,10 @@ export function createGeminiMeaningModel(
       throw new Error(`응답이 비었습니다: ${reason}`);
     }
     const parsed = OutputSchema.parse(JSON.parse(text));
-    const garbled = parsed.meanings.filter((m) => LOOSE_JAMO.test(m.meaning_ko)).length;
+    // 분해형(NFD)으로 온 정상 음절은 완성형으로 합쳐 두고, 그래도 남는 낱자모만 깨진 것으로 본다.
+    const meanings = parsed.meanings.map((m) => ({ id: m.id, meaningKo: m.meaning_ko.normalize('NFC') }));
+    const garbled = meanings.filter((m) => LOOSE_JAMO.test(m.meaningKo)).length;
     if (garbled > 0) throw new GarbledOutputError(garbled);
-    return parsed.meanings.map((m) => ({ id: m.id, meaningKo: m.meaning_ko }));
+    return meanings;
   };
 }
