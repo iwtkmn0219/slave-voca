@@ -2,7 +2,7 @@ import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { z } from 'zod';
 import type { MeaningModel } from './generate';
 
-export const MEANING_MODEL_ID = 'gemini-3.6-flash';
+export const MEANING_MODEL_ID = 'gemini-3.5-flash-lite';
 
 const SYSTEM_INSTRUCTION = [
   '너는 영어 논문·발표 자료를 읽는 한국인 학습자를 돕는다.',
@@ -33,7 +33,7 @@ const OutputSchema = z.object({
 
 export type GeminiClient = Pick<GoogleGenAI, 'models'>;
 
-// Gemini 3.6 Flash로 문맥 뜻을 만든다. 키는 GEMINI_API_KEY에서 읽는다(서버 전용).
+// Gemini 3.5 Flash-Lite로 문맥 뜻을 만든다. 키는 GEMINI_API_KEY에서 읽는다(서버 전용).
 export function createGeminiMeaningModel(
   client: GeminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }),
 ): MeaningModel {
@@ -47,7 +47,8 @@ export function createGeminiMeaningModel(
         responseJsonSchema: RESPONSE_JSON_SCHEMA,
         // 3.x는 사고를 끌 수 없다. 가장 낮은 MINIMAL로 사고 토큰(출력 요금에 포함)을 줄인다.
         thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-        maxOutputTokens: 8192,
+        // 200개 묶음의 출력이 약 5,500토큰(실측)이라 여유를 둔다. 과금은 실제 출력량만큼이다.
+        maxOutputTokens: 16384,
       },
     });
     const text = response.text;
