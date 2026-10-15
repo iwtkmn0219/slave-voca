@@ -11,7 +11,7 @@ import { Failed, Spinner } from "@/components/ui/status";
 import { Tag } from "@/components/ui/tag";
 import { formatInterval } from "@/lib/srs/interval";
 import type { Answer } from "@/lib/srs/scheduler";
-import { advanceQueue } from "@/lib/srs/session";
+import { advanceQueue, withMeanings, type RegeneratedMeaning } from "@/lib/srs/session";
 import { isNativeEnterTarget, isNativeSpaceTarget, isTypingTarget, keepFocus } from "@/lib/ui/keys";
 import type { StudyCard, Usage } from "@/server/repo/study";
 import type { RegenerateUsageResult } from "@/server/services/usage-meaning";
@@ -166,6 +166,8 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
   // 용례별 다시 만들기 상태. 결과 문구는 그 카드를 보는 동안만 남는다.
   const [regen, setRegen] = useState<Map<number, RegenState>>(new Map());
   const currentWordId = useRef<number | null>(null);
+  // 이번 세션에서 다시 만든 뜻. 응답 뒤 큐에서 빠진 카드를 되돌릴 때도 새 뜻을 살린다.
+  const meaningsRef = useRef(new Map<number, RegeneratedMeaning>());
   const locked = useRef(false);
   const [last, setLast] = useState<LastAnswer | null>(null);
   const [undoNote, setUndoNote] = useState<UndoNote>(null);
@@ -243,9 +245,8 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
           return next;
         });
         updateQueue((q) => {
-          // "모름"이면 같은 카드가 큐 뒤에 다시 들어가 있다. 빼고 응답 전 카드를 맨 앞에 둔다(그 사이 바뀐 뜻은 살린다).
-          const later = q.find((c) => c.wordId === target.card.wordId);
-          const restored = { ...target.card, usages: later?.usages ?? target.card.usages };
+          // "모름"이면 같은 카드가 큐 뒤에 다시 들어가 있다. 빼고 응답 전 카드를 맨 앞에 둔다(그 사이 다시 만든 뜻은 살린다).
+          const restored = withMeanings(target.card, meaningsRef.current);
           return [restored, ...q.filter((c) => c.wordId !== target.card.wordId)];
         });
         setSoon(null);
@@ -286,6 +287,7 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
           finish({ phase: "failed", text: result.error });
           return;
         }
+        meaningsRef.current.set(occurrenceId, { meaningKo: result.meaningKo, meaningStatus: result.meaningStatus });
         updateQueue((q) =>
           q.map((c) => ({
             ...c,
