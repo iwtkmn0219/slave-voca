@@ -1,13 +1,14 @@
 import { mapWithConcurrency } from '@/lib/async/pool';
 import { createGeminiMeaningModel } from '@/lib/meaning/gemini';
 import { generateMeanings, type MeaningModel } from '@/lib/meaning/generate';
-import { withCmudictFallback } from '@/lib/phonetic/cmudict';
+import { withCmudictFirst } from '@/lib/phonetic/cmudict';
 import { createPhoneticLookup } from '@/lib/phonetic/lookup';
 import type { Db } from '../db/client';
 import {
   listMeaningRequests,
   listWordsMissingPhonetic,
   markMeaningsFailed,
+  markMeaningsFailedUnlessDone,
   markPendingMeaningsFailed,
   setMeanings,
   setPhonetic,
@@ -23,27 +24,55 @@ export interface EnrichDeps {
   lookupPhonetic: (word: string) => Promise<string | null>;
 }
 
+// 키가 없으면 null: 뜻을 만들 수 없다는 뜻이다.
+export function defaultMeaningModel(): MeaningModel | null {
+  return process.env.GEMINI_API_KEY ? createGeminiMeaningModel() : null;
+}
+
 export function defaultEnrichDeps(): EnrichDeps {
   return {
-    meaningModel: process.env.GEMINI_API_KEY ? createGeminiMeaningModel() : null,
-    // 저장마다 새 차단기: 사전 API가 죽어 있으면 연속 5번 실패 후 나머지 조회를 건너뛴다.
-    // API에서 못 얻은 발음기호는 CMUdict로 채운다.
-    lookupPhonetic: withCmudictFallback(createPhoneticLookup()),
+    meaningModel: defaultMeaningModel(),
+    // CMUdict를 먼저 쓰고, 없는 단어만 사전 API로 찾는다. API는 저장마다 새 차단기를 쓴다
+    // (사전 API가 죽어 있으면 연속 5번 실패 후 나머지 조회를 건너뛴다).
+    lookupPhonetic: withCmudictFirst(createPhoneticLookup()),
   };
 }
 
-async function fillMeanings(db: Db, occurrenceIds: number[], model: MeaningModel | null) {
+// 용례들의 뜻을 만들어 저장한다. 성공은 done, 실패는 failed. 저장 직후 채우기와 다시 만들기가 함께 쓴다.
+// 이미 뜻이 있던 용례(done)는 새로 만들다 실패해도 원래 뜻을 그대로 둔다.
+async function generateAndStore(db: Db, occurrenceIds: readonly number[], model: MeaningModel) {
   const rows = listMeaningRequests(db, occurrenceIds);
-  if (!model) {
-    markMeaningsFailed(db, rows.map((r) => r.id));
-    return;
-  }
+  const hadMeaning = new Set(rows.filter((r) => r.meaningStatus === 'done').map((r) => r.id));
   const outcome = await generateMeanings(
     rows.map((r) => ({ id: r.id, word: r.lemma, sentence: r.sentence })),
     model,
   );
   setMeanings(db, outcome.done);
-  markMeaningsFailed(db, outcome.failedIds);
+  // 이미 뜻이 있던 용례는 그대로 두고, 그 사이 다른 요청이 done으로 만든 용례도 failed로 덮지 않는다.
+  markMeaningsFailedUnlessDone(db, outcome.failedIds.filter((id) => !hadMeaning.has(id)));
+  return { done: outcome.done.length, failed: outcome.failedIds.length };
+}
+
+async function fillMeanings(db: Db, occurrenceIds: number[], model: MeaningModel | null) {
+  if (!model) {
+    markMeaningsFailed(db, listMeaningRequests(db, occurrenceIds).map((r) => r.id));
+    return;
+  }
+  await generateAndStore(db, occurrenceIds, model);
+}
+
+export type RegenerateResult = { error: 'missing-key' } | { error: null; done: number; failed: number };
+
+// 뜻 다시 만들기: 실패한 뜻을 채우거나, 이상한 뜻을 새로 받는다(단어 하나 또는 여러 개).
+// 키가 없으면 아무것도 바꾸지 않고 알린다.
+export async function regenerateMeanings(
+  db: Db,
+  occurrenceIds: readonly number[],
+  model: MeaningModel | null,
+): Promise<RegenerateResult> {
+  if (!model) return { error: 'missing-key' };
+  if (occurrenceIds.length === 0) return { error: null, done: 0, failed: 0 };
+  return { error: null, ...(await generateAndStore(db, occurrenceIds, model)) };
 }
 
 async function fillPhonetics(db: Db, wordIds: number[], lookup: EnrichDeps['lookupPhonetic']) {

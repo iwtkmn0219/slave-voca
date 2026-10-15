@@ -21,6 +21,7 @@ export class StudyError extends Error {
 }
 
 export interface Usage {
+  occurrenceId: number;
   surface: string;
   sentence: string;
   meaningKo: string | null;
@@ -72,6 +73,7 @@ function usagesByWord(db: Db, wordIds: number[]): Map<number, Usage[]> {
   const rows = db
     .select({
       wordId: occurrences.wordId,
+      occurrenceId: occurrences.id,
       surface: occurrences.surface,
       sentence: occurrences.sentence,
       meaningKo: occurrences.meaningKo,

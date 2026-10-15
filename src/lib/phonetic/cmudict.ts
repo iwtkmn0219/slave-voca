@@ -27,22 +27,22 @@ export function cmudictLookup(word: string): string | null {
   return cached(word);
 }
 
-// API 조회가 실패하거나 못 찾으면 CMUdict로 채운다.
-// 보조 조회가 실패해도(파일 없음 등) 저장 전체를 오류로 만들지 않고 null을 준다. 로그는 한 번만 남긴다.
-export function withCmudictFallback(
-  lookup: (word: string) => Promise<string | null>,
-  fallback: PhoneticSource = cmudictLookup,
+// CMUdict(미국식, 발음 듣기 en-US와 같은 표기)를 먼저 찾고, 없을 때만 사전 API를 부른다.
+// 자주 멈추는 API 호출이 줄어든다. CMUdict 조회가 실패해도(파일 없음 등) 저장 전체를 오류로 만들지 않고
+// API로 넘어간다. 로그는 한 번만 남긴다.
+export function withCmudictFirst(
+  apiLookup: (word: string) => Promise<string | null>,
+  primary: PhoneticSource = cmudictLookup,
 ): (word: string) => Promise<string | null> {
   let logged = false;
   return async (word) => {
-    const found = await lookup(word);
-    if (found) return found;
     try {
-      return fallback(word);
+      const found = primary(word);
+      if (found) return found;
     } catch (err) {
       if (!logged) console.error('CMUdict 발음기호 조회 실패', err);
       logged = true;
-      return null;
     }
+    return apiLookup(word);
   };
 }

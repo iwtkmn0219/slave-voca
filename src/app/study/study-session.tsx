@@ -5,13 +5,16 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { buttonClass } from "@/components/ui/button";
 import { Highlighted } from "@/components/ui/highlighted";
 import { Kbd } from "@/components/ui/kbd";
+import { RegenIdleButton, RegenSlot, type RegenState } from "@/components/ui/regen-slot";
+import { REGEN_FAILED } from "@/lib/regen-messages";
 import { Failed, Spinner } from "@/components/ui/status";
 import { Tag } from "@/components/ui/tag";
 import { formatInterval } from "@/lib/srs/interval";
 import type { Answer } from "@/lib/srs/scheduler";
 import { advanceQueue } from "@/lib/srs/session";
-import { isNativeSpaceTarget, isTypingTarget } from "@/lib/ui/keys";
+import { isNativeEnterTarget, isNativeSpaceTarget, isTypingTarget } from "@/lib/ui/keys";
 import type { StudyCard, Usage } from "@/server/repo/study";
+import type { RegenerateUsageResult } from "@/server/services/usage-meaning";
 import { answerCard } from "./actions";
 import { SpeakButton, speak } from "./speak-button";
 
@@ -29,10 +32,25 @@ interface Soon {
   minutes: number;
 }
 
-function UsageBlock({ usage, primary }: { usage: Usage; primary: boolean }) {
+function UsageBlock({
+  usage,
+  primary,
+  regen,
+  onRegenerate,
+}: {
+  usage: Usage;
+  primary: boolean;
+  regen: RegenState | undefined;
+  onRegenerate: () => void;
+}) {
   return (
     <div className={primary ? "mt-6 border-t border-line pt-5" : "mt-4 border-t border-dashed border-line pt-4"}>
-      <div className={primary ? "text-[22px] leading-[1.45] font-bold" : "text-[17px] font-bold"}>
+      {/* 다시 만드는 동안 원래 뜻을 제자리에 흐리게 둔다: 카드 높이와 아래 답 버튼 위치가 변하지 않는다 */}
+      <div
+        className={`${primary ? "text-[22px] leading-[1.45] font-bold" : "text-[17px] font-bold"} ${
+          regen?.phase === "busy" ? "opacity-50" : ""
+        }`}
+      >
         {usage.meaningStatus === "done" ? (
           usage.meaningKo
         ) : usage.meaningStatus === "failed" ? (
@@ -46,16 +64,44 @@ function UsageBlock({ usage, primary }: { usage: Usage; primary: boolean }) {
       <p className={`mt-2.5 font-en text-ink-2 ${primary ? "text-lg leading-[1.6]" : "text-base leading-[1.6]"}`}>
         <Highlighted sentence={usage.sentence} word={usage.surface} />
       </p>
-      <p className="mt-2 text-[12.5px] text-muted">
-        — <span className="font-en text-[13.5px] italic">{usage.documentTitle}</span>
-      </p>
+      {/* 출처는 왼쪽, 다시 만들기는 오른쪽 끝: 제목 길이와 상관없이 용례마다 같은 자리다 */}
+      <div className="mt-2 flex items-start justify-between gap-4 text-[12.5px] leading-5 text-muted">
+        <p>
+          — <span className="font-en text-[13.5px] italic">{usage.documentTitle}</span>
+        </p>
+        <div className="flex h-5 shrink-0 items-center whitespace-nowrap">
+          <RegenSlot
+            state={regen}
+            onRegenerate={onRegenerate}
+            idle={<RegenIdleButton onRegenerate={onRegenerate} />}
+          />
+        </div>
+      </div>
     </div>
   );
+}
+
+// Server Action이 아니라 fetch로 부른다: Server Action은 응답 저장(answerCard)과 한 줄로 실행되어 응답이 기다리게 된다.
+async function requestRegeneration(occurrenceId: number): Promise<RegenerateUsageResult> {
+  const res = await fetch("/api/usage-meaning", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ occurrenceId }),
+  });
+  return (await res.json()) as RegenerateUsageResult;
 }
 
 export function StudySession({ cards }: { cards: StudyCard[] }) {
   const router = useRouter();
   const [queue, setQueue] = useState(cards);
+  // 큐를 바꾸는 곳은 모두 이 함수를 거친다: 응답이 끝나는 사이에 다시 만들기가 새 뜻을 넣었어도 최신 큐 위에서 갱신한다.
+  // (클릭할 때 잡힌 queue로 갱신하면 새 뜻이 옛 뜻으로 되돌아간다)
+  const queueRef = useRef(cards);
+  const updateQueue = (change: (q: StudyCard[]) => StudyCard[]) => {
+    queueRef.current = change(queueRef.current);
+    setQueue(queueRef.current);
+    return queueRef.current;
+  };
   const [revealed, setRevealed] = useState(false);
   const [answered, setAnswered] = useState(0);
   const [againCount, setAgainCount] = useState(0);
@@ -63,6 +109,9 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
   const [soon, setSoon] = useState<Soon | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
+  // 용례별 다시 만들기 상태. 결과 문구는 그 카드를 보는 동안만 남는다.
+  const [regen, setRegen] = useState<Map<number, RegenState>>(new Map());
+  const currentWordId = useRef<number | null>(null);
   const locked = useRef(false);
 
   const card = queue[0];
@@ -83,8 +132,10 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
         if (choice === "again") setAgainCount((n) => n + 1);
         const dues = new Map(lastDue).set(card.wordId, result.due);
         setLastDue(dues);
-        const next = advanceQueue(queue, choice).map((c) =>
-          c.wordId === card.wordId ? { ...c, isNew: false, intervals: result.intervals } : c,
+        const next = updateQueue((q) =>
+          advanceQueue(q, choice).map((c) =>
+            c.wordId === card.wordId ? { ...c, isNew: false, intervals: result.intervals } : c,
+          ),
         );
         if (next.length === 0) {
           const now = Date.now();
@@ -95,12 +146,53 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
               : null,
           );
         }
-        setQueue(next);
         setRevealed(false);
+        // 다음 카드로 넘어가면 결과 문구를 지운다. 진행 중인 요청의 스피너는 그 카드가 다시 나올 때를 위해 둔다.
+        setRegen((m) => new Map([...m].filter(([, s]) => s.phase === "busy")));
       } finally {
         locked.current = false; // 실패해도 다시 누를 수 있게 푼다
       }
     });
+  };
+
+  useEffect(() => {
+    currentWordId.current = card?.wordId ?? null;
+  });
+
+  const setUsageRegen = (occurrenceId: number, state: RegenState | undefined) =>
+    setRegen((m) => {
+      const next = new Map(m);
+      if (state) next.set(occurrenceId, state);
+      else next.delete(occurrenceId);
+      return next;
+    });
+
+  // 용례 하나의 뜻을 다시 받아 큐 안의 같은 용례를 모두 바꾼다. 기다리는 동안에도 1·2·3 응답은 된다.
+  // 끝났을 때 이미 다음 카드로 넘어갔으면 결과 문구는 남기지 않는다(그 카드가 다시 나오면 새 뜻만 보인다).
+  const regenerate = (wordId: number, occurrenceId: number) => {
+    if (regen.get(occurrenceId)?.phase === "busy") return;
+    setUsageRegen(occurrenceId, { phase: "busy" });
+    const finish = (state: RegenState) =>
+      setUsageRegen(occurrenceId, currentWordId.current === wordId ? state : undefined);
+    requestRegeneration(occurrenceId)
+      .then((result) => {
+        if (result.error !== null) {
+          finish({ phase: "failed", text: result.error });
+          return;
+        }
+        updateQueue((q) =>
+          q.map((c) => ({
+            ...c,
+            usages: c.usages.map((u) =>
+              u.occurrenceId === occurrenceId
+                ? { ...u, meaningKo: result.meaningKo, meaningStatus: result.meaningStatus }
+                : u,
+            ),
+          })),
+        );
+        finish(result.failed ? { phase: "failed", text: REGEN_FAILED } : { phase: "done" });
+      })
+      .catch(() => finish({ phase: "failed", text: REGEN_FAILED }));
   };
 
   // 키보드: Space/Enter 뒷면, 1·2·3 응답, P 발음, 완료 화면에서 Enter 홈. 입력칸에서는 끈다.
@@ -109,8 +201,10 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
     onKey.current = (e) => {
       const target = e.target as HTMLInputElement | null;
       if (isTypingTarget(target) || e.ctrlKey || e.metaKey || e.altKey) return;
-      // 포커스된 버튼 위의 Space·Enter는 브라우저가 그 버튼을 누르므로 여기서 또 처리하지 않는다.
-      if ((e.key === " " || e.key === "Enter") && isNativeSpaceTarget(target)) return;
+      // 포커스된 버튼·링크 위의 Space·Enter는 브라우저가 그것을 누르므로 여기서 또 처리하지 않는다.
+      // (완료 화면의 "다시 확인" 링크에서 Enter가 링크 이동과 홈 이동을 함께 실행하던 문제)
+      if (e.key === " " && isNativeSpaceTarget(target)) return;
+      if (e.key === "Enter" && isNativeEnterTarget(target)) return;
       if (!card) {
         if (e.key === "Enter") router.push("/");
         return;
@@ -208,8 +302,18 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
             <p className={`mt-1 font-en text-[19px] ${card.phonetic ? "text-muted" : "text-[15px] text-muted"}`}>
               {card.phonetic ?? "발음기호 없음"}
             </p>
-            {first && <UsageBlock usage={first} primary />}
-            {second && <UsageBlock usage={second} primary={false} />}
+            {[first, second].map(
+              (u, i) =>
+                u && (
+                  <UsageBlock
+                    key={u.occurrenceId}
+                    usage={u}
+                    primary={i === 0}
+                    regen={regen.get(u.occurrenceId)}
+                    onRegenerate={() => regenerate(card.wordId, u.occurrenceId)}
+                  />
+                ),
+            )}
           </>
         ) : (
           <p className="mt-auto pt-12 text-center text-sm text-muted">이 문서에서 어떤 뜻이었는지 떠올려 보세요</p>

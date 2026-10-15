@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isNativeSpaceTarget, isTypingTarget } from '@/lib/ui/keys';
+import { isNativeEnterTarget, isNativeSpaceTarget, isTypingTarget } from '@/lib/ui/keys';
 
 describe('isTypingTarget', () => {
   it('detects text fields and editable content', () => {
@@ -25,5 +25,14 @@ describe('isNativeSpaceTarget', () => {
     expect(isNativeSpaceTarget({ tagName: 'BODY' })).toBe(false);
     expect(isNativeSpaceTarget({ tagName: 'INPUT', type: 'text' })).toBe(false);
     expect(isNativeSpaceTarget(null)).toBe(false);
+  });
+});
+
+describe('isNativeEnterTarget', () => {
+  it('also covers links, where Enter follows the link', () => {
+    expect(isNativeEnterTarget({ tagName: 'A' })).toBe(true);
+    expect(isNativeEnterTarget({ tagName: 'BUTTON' })).toBe(true);
+    expect(isNativeEnterTarget({ tagName: 'BODY' })).toBe(false);
+    expect(isNativeEnterTarget(null)).toBe(false);
   });
 });

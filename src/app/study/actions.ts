@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import type { Intervals } from "@/lib/srs/interval";
 import { ANSWERS, type Answer } from "@/lib/srs/scheduler";
 import { getDb } from "@/server/db/client";
@@ -16,6 +17,9 @@ export async function answerCard(wordId: number, answer: Answer): Promise<Answer
   }
   try {
     const { due, intervals } = recordAnswer(getDb(), wordId, answer, new Date());
+    // 상단 메뉴의 "오늘 남은 수" 배지(레이아웃)가 바로 줄도록 다시 그린다.
+    // 복습 화면의 큐 상태는 클라이언트 state라 그대로 유지된다.
+    revalidatePath("/", "layout");
     return { error: null, due: due.getTime(), intervals };
   } catch (err) {
     if (err instanceof StudyError) return { error: err.message };
