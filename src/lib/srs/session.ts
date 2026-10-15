@@ -6,3 +6,18 @@ export function advanceQueue<T>(queue: readonly T[], answer: Answer): T[] {
   const [head, ...rest] = queue;
   return answer === 'again' ? [...rest, head] : rest;
 }
+
+export interface RegeneratedMeaning {
+  meaningKo: string | null;
+  meaningStatus: 'pending' | 'done' | 'failed';
+}
+
+// 이번 세션에서 다시 만든 뜻(용례 id별)을 카드의 용례에 입힌다. 직전 응답 되돌리기가 응답 전 카드를 복원할 때,
+// 그 사이 다시 만든 뜻을 옛 뜻으로 되돌리지 않으려는 것이다. 바뀐 용례가 없으면 같은 카드를 돌려준다.
+export function withMeanings<C extends { usages: { occurrenceId: number }[] }>(
+  card: C,
+  meanings: ReadonlyMap<number, RegeneratedMeaning>,
+): C {
+  if (!card.usages.some((u) => meanings.has(u.occurrenceId))) return card;
+  return { ...card, usages: card.usages.map((u) => ({ ...u, ...meanings.get(u.occurrenceId) })) };
+}

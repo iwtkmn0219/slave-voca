@@ -6,6 +6,7 @@ import { Highlighted } from "@/components/ui/highlighted";
 import { Kbd } from "@/components/ui/kbd";
 import { Status } from "@/components/ui/status";
 import { Tag } from "@/components/ui/tag";
+import { shortSentence } from "@/lib/text/truncate";
 import {
   filterCounts,
   matchesFilter,
@@ -223,11 +224,12 @@ export function CandidateTable({
                   </td>
                   <td className="px-3 py-[7px] text-right text-sm text-muted tabular-nums">{c.count}</td>
                   <td
+                    title={c.sentence}
                     className={`px-3 py-[7px] font-en text-[15px] leading-[1.55] ${
                       on ? "text-ink-2" : "text-muted [&_mark]:font-normal [&_mark]:opacity-55"
                     }`}
                   >
-                    <Highlighted sentence={c.sentence} word={c.surface} />
+                    <Highlighted sentence={shortSentence(c.sentence, c.surface)} word={c.surface} />
                   </td>
                 </tr>
               );

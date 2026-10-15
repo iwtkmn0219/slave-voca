@@ -11,18 +11,72 @@ import { Failed, Spinner } from "@/components/ui/status";
 import { Tag } from "@/components/ui/tag";
 import { formatInterval } from "@/lib/srs/interval";
 import type { Answer } from "@/lib/srs/scheduler";
-import { advanceQueue } from "@/lib/srs/session";
-import { isNativeEnterTarget, isNativeSpaceTarget, isTypingTarget } from "@/lib/ui/keys";
+import { advanceQueue, withMeanings, type RegeneratedMeaning } from "@/lib/srs/session";
+import { isNativeEnterTarget, isNativeSpaceTarget, isTypingTarget, keepFocus } from "@/lib/ui/keys";
 import type { StudyCard, Usage } from "@/server/repo/study";
 import type { RegenerateUsageResult } from "@/server/services/usage-meaning";
-import { answerCard } from "./actions";
+import { answerCard, undoLastAnswer } from "./actions";
 import { SpeakButton, speak } from "./speak-button";
 
-const ANSWER_BUTTONS: { answer: Answer; label: string; key: string; tone: string }[] = [
-  { answer: "again", label: "모름", key: "1", tone: "bg-again-soft text-again" },
-  { answer: "hard", label: "애매", key: "2", tone: "bg-hard-soft text-hard" },
-  { answer: "good", label: "앎", key: "3", tone: "bg-good-soft text-good" },
+const ANSWER_BUTTONS: { answer: Answer; label: string; key: string; tone: string; text: string }[] = [
+  { answer: "again", label: "모름", key: "1", tone: "bg-again-soft text-again", text: "text-again" },
+  { answer: "hard", label: "애매", key: "2", tone: "bg-hard-soft text-hard", text: "text-hard" },
+  { answer: "good", label: "앎", key: "3", tone: "bg-good-soft text-good", text: "text-good" },
 ];
+
+// 되돌릴 수 있는 직전 응답. card는 응답 전 카드(앞면으로 다시 보여 줄 것), prevDue는 응답 전 lastDue 값.
+interface LastAnswer {
+  logId: number;
+  card: StudyCard;
+  choice: Answer;
+  prevDue: number | undefined;
+}
+
+type UndoNote = { kind: "done"; lemma: string } | { kind: "failed"; text: string } | null;
+
+const UNDO_REJECTED = "되돌리지 못했습니다 · 다른 곳에서 이미 답한 카드입니다";
+const UNDO_FAILED = "되돌리지 못했습니다";
+
+const undoButtonClass =
+  "text-muted underline decoration-dotted underline-offset-[3px] hover:text-accent hover:decoration-solid focus-visible:text-accent focus-visible:decoration-solid disabled:opacity-55";
+
+// 답 버튼 아래 단축키 안내 줄의 되돌리기 자리(Designer 2026-10-16). 무엇이 되돌려지는지 "단어 · 응답"으로 보인다.
+function UndoControl({
+  last,
+  note,
+  busy,
+  onUndo,
+  label = "되돌리기",
+}: {
+  last: LastAnswer | null;
+  note: UndoNote;
+  busy: boolean;
+  onUndo: () => void;
+  label?: string;
+}) {
+  const answer = last && ANSWER_BUTTONS.find((b) => b.answer === last.choice);
+  return (
+    <span aria-live="polite" className="inline-flex flex-wrap items-center gap-x-1.5">
+      {note?.kind === "done" && (
+        <span>
+          <span className="font-en">{note.lemma}</span> 응답을 되돌렸습니다
+        </span>
+      )}
+      {note?.kind === "failed" && <Failed>{note.text}</Failed>}
+      {last && answer && !note && (
+        <>
+          <Kbd>Z</Kbd>
+          <button type="button" onMouseDown={keepFocus} onClick={onUndo} disabled={busy} className={undoButtonClass}>
+            {label}
+          </button>
+          <span className="ml-1">
+            <span className="font-en">{last.card.lemma}</span> · <span className={answer.text}>{answer.label}</span>
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
 
 // 세션을 마친 뒤 이 시간 안에 다시 나오는 카드(학습 단계)를 따로 알려 준다.
 const SOON_WINDOW_MS = 60 * 60_000;
@@ -91,7 +145,7 @@ async function requestRegeneration(occurrenceId: number): Promise<RegenerateUsag
   return (await res.json()) as RegenerateUsageResult;
 }
 
-export function StudySession({ cards }: { cards: StudyCard[] }) {
+export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpeak: boolean }) {
   const router = useRouter();
   const [queue, setQueue] = useState(cards);
   // 큐를 바꾸는 곳은 모두 이 함수를 거친다: 응답이 끝나는 사이에 다시 만들기가 새 뜻을 넣었어도 최신 큐 위에서 갱신한다.
@@ -112,9 +166,20 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
   // 용례별 다시 만들기 상태. 결과 문구는 그 카드를 보는 동안만 남는다.
   const [regen, setRegen] = useState<Map<number, RegenState>>(new Map());
   const currentWordId = useRef<number | null>(null);
+  // 이번 세션에서 다시 만든 뜻. 응답 뒤 큐에서 빠진 카드를 되돌릴 때도 새 뜻을 살린다.
+  const meaningsRef = useRef(new Map<number, RegeneratedMeaning>());
   const locked = useRef(false);
+  const [last, setLast] = useState<LastAnswer | null>(null);
+  const [undoNote, setUndoNote] = useState<UndoNote>(null);
 
   const card = queue[0];
+
+  // 뒷면 열기. 발음 자동 재생이 켜져 있으면 단어를 한 번 읽는다(설정 화면).
+  const reveal = () => {
+    if (!card || revealed) return;
+    setRevealed(true);
+    if (autoSpeak) speak(card.lemma);
+  };
 
   const answer = (choice: Answer) => {
     // saving(isPending)은 다음 렌더에야 버튼을 막으므로, 같은 순간의 두 번째 입력은 ref로 즉시 막는다.
@@ -130,6 +195,8 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
         setError(null);
         setAnswered((n) => n + 1);
         if (choice === "again") setAgainCount((n) => n + 1);
+        setLast({ logId: result.logId, card, choice, prevDue: lastDue.get(card.wordId) });
+        setUndoNote(null);
         const dues = new Map(lastDue).set(card.wordId, result.due);
         setLastDue(dues);
         const next = updateQueue((q) =>
@@ -151,6 +218,46 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
         setRegen((m) => new Map([...m].filter(([, s]) => s.phase === "busy")));
       } finally {
         locked.current = false; // 실패해도 다시 누를 수 있게 푼다
+      }
+    });
+  };
+
+  // 직전 응답 되돌리기: 서버에서 카드 상태를 되돌리고, 그 카드를 앞면으로 큐 맨 앞에 다시 둔다.
+  // 거부(다시 해도 같음)면 대상을 지우고, 그 밖의 실패면 대상을 남겨 다시 시도할 수 있게 한다.
+  const undo = () => {
+    if (!last || locked.current) return;
+    locked.current = true;
+    const target = last;
+    startSaving(async () => {
+      try {
+        const result = await undoLastAnswer(target.logId);
+        if (result.error !== null) {
+          if (result.rejected) setLast(null);
+          setUndoNote({ kind: "failed", text: result.rejected ? UNDO_REJECTED : UNDO_FAILED });
+          return;
+        }
+        setAnswered((n) => n - 1);
+        if (target.choice === "again") setAgainCount((n) => n - 1);
+        setLastDue((m) => {
+          const next = new Map(m);
+          if (target.prevDue === undefined) next.delete(target.card.wordId);
+          else next.set(target.card.wordId, target.prevDue);
+          return next;
+        });
+        updateQueue((q) => {
+          // "모름"이면 같은 카드가 큐 뒤에 다시 들어가 있다. 빼고 응답 전 카드를 맨 앞에 둔다(그 사이 다시 만든 뜻은 살린다).
+          const restored = withMeanings(target.card, meaningsRef.current);
+          return [restored, ...q.filter((c) => c.wordId !== target.card.wordId)];
+        });
+        setSoon(null);
+        setRevealed(false);
+        setRegen((m) => new Map([...m].filter(([, s]) => s.phase === "busy")));
+        setLast(null);
+        setUndoNote({ kind: "done", lemma: target.card.lemma });
+      } catch {
+        setUndoNote({ kind: "failed", text: UNDO_FAILED });
+      } finally {
+        locked.current = false;
       }
     });
   };
@@ -180,6 +287,7 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
           finish({ phase: "failed", text: result.error });
           return;
         }
+        meaningsRef.current.set(occurrenceId, { meaningKo: result.meaningKo, meaningStatus: result.meaningStatus });
         updateQueue((q) =>
           q.map((c) => ({
             ...c,
@@ -205,6 +313,13 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
       // (완료 화면의 "다시 확인" 링크에서 Enter가 링크 이동과 홈 이동을 함께 실행하던 문제)
       if (e.key === " " && isNativeSpaceTarget(target)) return;
       if (e.key === "Enter" && isNativeEnterTarget(target)) return;
+      // 저장·되돌리기 처리 중에는 응답·뒷면·되돌리기 키를 무시한다.
+      if (locked.current && ["1", "2", "3", " ", "Enter", "z", "Z"].includes(e.key)) return;
+      if (e.key === "z" || e.key === "Z") {
+        e.preventDefault();
+        undo();
+        return;
+      }
       if (!card) {
         if (e.key === "Enter") router.push("/");
         return;
@@ -213,7 +328,7 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
         speak(card.lemma);
       } else if (!revealed && (e.key === " " || e.key === "Enter")) {
         e.preventDefault();
-        setRevealed(true);
+        reveal();
       } else if (revealed) {
         const hit = ANSWER_BUTTONS.find((b) => b.key === e.key);
         if (hit) {
@@ -259,6 +374,11 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
             홈으로 <Kbd onAccent>Enter</Kbd>
           </button>
         </div>
+        {(last || undoNote) && (
+          <p className="mt-4 text-[13px] text-muted">
+            <UndoControl last={last} note={undoNote} busy={saving} onUndo={undo} label="마지막 응답 되돌리기" />
+          </p>
+        )}
       </div>
     );
   }
@@ -341,14 +461,24 @@ export function StudySession({ cards }: { cards: StudyCard[] }) {
       ) : (
         <button
           type="button"
-          onClick={() => setRevealed(true)}
+          onClick={reveal}
           className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-lg border border-line-strong bg-surface p-3.5 text-[15px] font-semibold text-ink hover:bg-sunken"
         >
           뒷면 보기 <Kbd>Space</Kbd>
         </button>
       )}
-      <p className="mt-2.5 text-center text-[13px] text-muted">
-        <Kbd>P</Kbd> 발음 듣기
+      <p className="mt-2.5 flex flex-wrap items-center justify-center gap-x-2 text-[13px] text-muted">
+        <span>
+          <Kbd>P</Kbd> 발음 듣기
+        </span>
+        {(last || undoNote) && (
+          <>
+            <span aria-hidden className="mx-1">
+              ·
+            </span>
+            <UndoControl last={last} note={undoNote} busy={saving} onUndo={undo} />
+          </>
+        )}
       </p>
 
       {error && (

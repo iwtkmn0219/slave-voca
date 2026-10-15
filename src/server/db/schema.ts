@@ -81,6 +81,8 @@ export const reviewLogs = sqliteTable('review_logs', {
     .references(() => words.id, { onDelete: 'cascade' }),
   rating: integer('rating').notNull(),
   reviewedAt: integer('reviewed_at', { mode: 'timestamp_ms' }).notNull(),
+  // 응답 전 카드의 일정 상태(JSON). 직전 응답 되돌리기에 쓴다. 이 열이 생기기 전 기록은 null.
+  prevCard: text('prev_card'),
 });
 
 export const knownWords = sqliteTable('known_words', {

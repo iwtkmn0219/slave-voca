@@ -29,6 +29,13 @@
       "when": 1791899011423,
       "tag": "0003_srs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792098388939,
+      "tag": "0004_review_prev_card",
+      "breakpoints": true
     }
   ]
 }

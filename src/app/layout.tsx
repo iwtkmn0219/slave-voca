@@ -4,6 +4,8 @@ import localFont from "next/font/local";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { NavLinks, NavLinksFallback } from "@/components/nav/nav-links";
+import { ThemeSync } from "@/components/theme-sync";
+import { THEME_SCRIPT } from "@/lib/ui/theme";
 import { getDb } from "@/server/db/client";
 import { getSettings } from "@/server/repo/settings";
 import { countStudyToday } from "@/server/repo/study";
@@ -42,8 +44,13 @@ async function TodayBadge() {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ko" className={`${pretendard.variable} ${gentium.variable} h-full`}>
+    // data-theme는 <head>의 인라인 스크립트가 붙인다(쿠키). React가 모르는 속성이라 경고를 끈다.
+    <html lang="ko" className={`${pretendard.variable} ${gentium.variable} h-full`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="flex min-h-full flex-col">
+        <ThemeSync />
         <nav className="flex h-[52px] items-center gap-1 border-b border-line bg-surface px-6">
           <span className="mr-5 text-[13px] font-semibold tracking-[0.02em] text-muted">slave-voca</span>
           <Suspense fallback={<NavLinksFallback />}>
