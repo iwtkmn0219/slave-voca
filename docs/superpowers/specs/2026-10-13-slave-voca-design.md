@@ -138,6 +138,7 @@ scripts/
 - 구조화 출력(`responseMimeType: "application/json"` + `responseJsonSchema`)으로 `{ meanings: [{ id, meaning_ko }] }`를 받고, zod로 한 번 더 검증한다. 응답이 비었거나(차단 등) 형식이 틀리면 그 묶음은 실패로 처리한다.
 - 시스템 지시: "각 단어가 주어진 문장에서 쓰인 의미를 한국어로 짧게(2~15자, 품사에 맞게) 답하라. 사전의 첫 뜻이 아니라 이 문장 속 의미를 쓴다."
 - API 키는 환경변수 `GEMINI_API_KEY`(`.env.local`)에서 읽고, 서버에서만 사용한다.
+- **재시도:** 묶음 요청이 HTTP 429, 503, 그 밖의 5xx나 네트워크 오류로 실패하면 1→2→4초 지수 백오프(지터 포함)로 최대 3번 다시 보낸다. 400·401·403·404는 재시도하지 않는다. (2026-10-15 실측: attention 논문에서 묶음 5개 중 3개가 503 "high demand"로 실패해 뜻의 53%가 비었다.)
 - 응답에 빠진 id나 요청 실패는 해당 용례를 `meaning_status=failed`로 둔다. 문서 단어 목록에서 재시도할 수 있다.
 - SDK 사용법은 `@google/genai` 공식 문서(googleapis.github.io/js-genai)를 따른다.
 
@@ -221,3 +222,4 @@ scripts/
 - 2026-10-13: 뜻 모델을 Gemini 3.5 Flash-Lite로 확정(2.5는 새 사용자 접근 제한, Developer·CodeReviewer가 발견). 사고 설정을 `thinkingLevel: MINIMAL`로 변경, 가격 갱신
 - 2026-10-15: M3·UI 개편 완료 반영. 마일스톤 4 범위를 개편안 결정, Designer 조건, M2·M3·UI 리뷰 항목으로 정리
 - 2026-10-15: 문맥 뜻 모델을 Gemini 3.6 Flash로 변경(사용자 결정). 8.4 모델·사고 설정·가격 갱신. API 키 설정됨
+- 2026-10-15: 8.4에 뜻 생성 재시도(429·503·5xx, 최대 3번 백오프) 추가. 실측에서 503 과부하로 뜻 53%가 실패한 결과 반영

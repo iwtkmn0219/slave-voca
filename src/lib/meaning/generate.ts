@@ -19,10 +19,55 @@ export interface GenerateOutcome {
   failedIds: number[];
 }
 
-// 50개씩 나눠 요청한다. 응답에 빠졌거나 빈 뜻, 실패한 묶음은 failedIds로 돌려준다.
+// 일시적인 오류만 다시 시도한다: 429(요청 한도), 5xx(서버 과부하 등), 상태 없는 네트워크 오류.
+// 400·401·403·404처럼 키·요청·모델이 틀린 오류와, 응답 형식 오류(JSON·스키마·차단)는 다시 보내도 같으므로 제외한다.
+// 상태 코드는 @google/genai ApiError.status를 이름으로 읽어 이 모듈이 SDK에 묶이지 않게 한다.
+const NETWORK_ERROR_NAMES = new Set(['AbortError', 'TimeoutError']);
+
+export function isRetryableError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const { status, name, cause } = err as { status?: unknown; name?: unknown; cause?: unknown };
+  if (typeof status === 'number') return status === 429 || status >= 500;
+  if (err instanceof TypeError) return true; // fetch failed
+  if (typeof name === 'string' && NETWORK_ERROR_NAMES.has(name)) return true;
+  return typeof (cause as { code?: unknown } | undefined)?.code === 'string'; // ECONNRESET 등
+}
+
+// 재시도 간격(1→2→4초)에 ±20% 지터를 준다. 테스트는 sleep·random을 주입해 실제로 기다리지 않는다.
+const RETRY_DELAYS_MS = [1000, 2000, 4000];
+const RETRY_JITTER = 0.2;
+
+export interface RetryOptions {
+  sleep?: (ms: number) => Promise<void>;
+  random?: () => number;
+  isRetryable?: (err: unknown) => boolean;
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function requestWithRetry(
+  batch: MeaningRequest[],
+  batchNo: number,
+  model: MeaningModel,
+  { sleep = wait, random = Math.random, isRetryable = isRetryableError }: RetryOptions,
+): Promise<MeaningResult[]> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await model(batch);
+    } catch (err) {
+      if (attempt >= RETRY_DELAYS_MS.length || !isRetryable(err)) throw err;
+      const status = (err as { status?: unknown }).status ?? 'network';
+      console.warn(`문맥 뜻 재시도: 묶음 ${batchNo}, 상태 ${status}, ${attempt + 1}/${RETRY_DELAYS_MS.length}회`);
+      await sleep(RETRY_DELAYS_MS[attempt] * (1 + RETRY_JITTER * (2 * random() - 1)));
+    }
+  }
+}
+
+// 50개씩 나눠 요청한다. 응답에 빠졌거나 빈 뜻, 재시도해도 실패한 묶음은 failedIds로 돌려준다.
 export async function generateMeanings(
   requests: MeaningRequest[],
   model: MeaningModel,
+  retry: RetryOptions = {},
 ): Promise<GenerateOutcome> {
   const outcome: GenerateOutcome = { done: [], failedIds: [] };
   for (let i = 0; i < requests.length; i += MEANING_BATCH_SIZE) {
@@ -30,7 +75,7 @@ export async function generateMeanings(
     const ids = new Set(batch.map((r) => r.id));
     let results: MeaningResult[] = [];
     try {
-      results = await model(batch);
+      results = await requestWithRetry(batch, i / MEANING_BATCH_SIZE + 1, model, retry);
     } catch (err) {
       console.error('문맥 뜻 생성 실패', err);
     }
