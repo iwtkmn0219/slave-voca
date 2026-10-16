@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-16
+
 ### 바뀜
 - 빈도표를 wordfreq(CC BY-SA 4.0)로 바꿨다. 상업적으로 쓸 수 있고, 출처는 `data/frequency-NOTICE.md`에 있다.
 - 흔한 단어 제외 기준(N)의 기본값을 5,000에서 3,000으로 낮췄다. 학술 핵심어 예외 없이도 hence, whereas, respectively 등이 후보로 남는다.
@@ -61,7 +63,8 @@
 ### 추가
 - PDF 업로드, 빈도 기준 후보 단어 추출, 검토 화면.
 
-[Unreleased]: https://github.com/iwtkmn0219/slave-voca/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/iwtkmn0219/slave-voca/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.1.0...v0.2.0
