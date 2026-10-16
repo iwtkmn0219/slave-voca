@@ -35,3 +35,9 @@ export function loginNoticeKind(error: string | string[] | undefined): 'cancelle
   if (error === undefined) return null;
   return error === 'access_denied' ? 'cancelled' : 'error';
 }
+
+// 관리 화면: 이 화면에서 바꾼 상태(override)는 서버 값이 바꾸기 전 값(from) 그대로인 동안만 보여 준다.
+// 서버 값이 그 뒤에 달라졌다면(다른 관리자가 바꿈) 서버 값이 이긴다.
+export function effectiveStatus<S extends string>(server: S, override: { from: S; to: S } | undefined): S {
+  return override !== undefined && override.from === server ? override.to : server;
+}

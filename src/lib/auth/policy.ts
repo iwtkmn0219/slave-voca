@@ -55,10 +55,22 @@ export function canSetStatus(
   return !(actor.id === target.id && next === 'blocked');
 }
 
-// 로그인 뒤 돌아갈 곳(?next=). 같은 사이트 안의 경로만 받는다: /로 시작하고 //나 /\로 시작하지 않으며,
-// 인증 화면·API가 아니다. 아니면 홈.
+// 로그인 뒤 돌아갈 곳(?next=). 같은 사이트 안의 경로만 받는다. 브라우저가 URL을 읽는 방식 그대로 해석한 결과로 검사한다:
+// 탭·줄바꿈은 브라우저가 지우고(/\t/evil.example → //evil.example), 점 구간(/x/../login, /%2e/api)은 접힌다.
+// 그래서 제어 문자와 공백은 거르고, 정규화한 뒤에도 같은 출처의 인증 화면·API가 아니어야 한다. 아니면 홈.
+// 돌려주는 값은 정규화한 경로와 쿼리다(#조각은 버린다).
+const LOCAL_ORIGIN = 'http://local.invalid';
+
 export function safeNextPath(value: unknown): string {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return '/';
-  if (/^\/(login|pending|blocked|api)(\/|\?|$)/.test(value)) return '/';
-  return value;
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/';
+  if (/[\u0000- \u007f\\]/.test(value)) return '/';
+  let url: URL;
+  try {
+    url = new URL(value, LOCAL_ORIGIN);
+  } catch {
+    return '/';
+  }
+  if (url.origin !== LOCAL_ORIGIN) return '/';
+  if (/^\/(login|pending|blocked|api)(\/|$)/.test(url.pathname)) return '/';
+  return url.pathname + url.search;
 }

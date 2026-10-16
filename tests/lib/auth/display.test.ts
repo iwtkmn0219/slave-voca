@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayName, formatJoinedAt, initialOf, loginNoticeKind } from '@/lib/auth/display';
+import { displayName, effectiveStatus, formatJoinedAt, initialOf, loginNoticeKind } from '@/lib/auth/display';
 
 describe('formatJoinedAt', () => {
   const now = new Date('2026-10-20T00:00:00Z');
@@ -45,5 +45,21 @@ describe('loginNoticeKind', () => {
     expect(loginNoticeKind('server_error')).toBe('error');
     expect(loginNoticeKind('')).toBe('error');
     expect(loginNoticeKind(['access_denied'])).toBe('error');
+  });
+});
+
+describe('effectiveStatus', () => {
+  it('shows the server status when nothing was changed here', () => {
+    expect(effectiveStatus('pending', undefined)).toBe('pending');
+  });
+
+  it('shows the local change until the server data catches up', () => {
+    expect(effectiveStatus('pending', { from: 'pending', to: 'approved' })).toBe('approved');
+  });
+
+  it('lets newer server data win once it differs from what the change started from', () => {
+    // 여기서 승인했고(pending → approved), 다른 관리자가 사용 중지해서 서버 값이 blocked가 됐다.
+    expect(effectiveStatus('blocked', { from: 'pending', to: 'approved' })).toBe('blocked');
+    expect(effectiveStatus('approved', { from: 'pending', to: 'approved' })).toBe('approved');
   });
 });

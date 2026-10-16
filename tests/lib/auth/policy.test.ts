@@ -59,4 +59,26 @@ describe('safeNextPath', () => {
       expect(safeNextPath(bad)).toBe('/');
     }
   });
+
+  it('rejects control characters and paths that normalize into another site or an auth path', () => {
+    // 브라우저는 URL 안의 탭·줄바꿈을 지우고 점 구간을 접는다: "/\t/evil.example" → "//evil.example"
+    const bad = [
+      '/\t/evil.example',
+      '/\n/evil.example',
+      '/\r/evil.example',
+      '/\u0000x',
+      '/ /evil.example',
+      '/x/../login',
+      '/%2e/api/auth/get-session',
+      '/a/%2E%2E/pending',
+    ];
+    for (const value of bad) expect(safeNextPath(value)).toBe('/');
+  });
+
+  it('drops the fragment and keeps the normalized path and query', () => {
+    expect(safeNextPath('/login#again')).toBe('/');
+    expect(safeNextPath('/documents#top')).toBe('/documents');
+    expect(safeNextPath('/a/./b?x=1')).toBe('/a/b?x=1');
+    expect(safeNextPath('/documents/a%20b?x=1')).toBe('/documents/a%20b?x=1');
+  });
 });

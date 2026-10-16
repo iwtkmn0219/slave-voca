@@ -3,20 +3,37 @@
 import { useState } from "react";
 import { GoogleButton } from "@/components/auth/google-button";
 import { buttonClass } from "@/components/ui/button";
+import { Notice } from "@/components/ui/notice";
+import { succeeded } from "@/lib/auth/attempt";
 import { authClient } from "@/lib/auth/client";
 
 export function GoogleSignInButton({ next }: { next: string }) {
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
-    <GoogleButton
-      busy={busy}
-      onClick={async () => {
-        setBusy(true);
-        // 성공하면 Google에서 돌아와 홈(→ 상태에 맞는 화면)으로, 실패하면 이 화면에 error를 붙여 돌아온다.
-        const { error } = await authClient.signIn.social({ provider: "google", callbackURL: next, errorCallbackURL: "/login" });
-        if (error) setBusy(false);
-      }}
-    />
+    <>
+      {failed && (
+        <Notice tone="error" className="mb-3">
+          로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.
+        </Notice>
+      )}
+      <GoogleButton
+        busy={busy}
+        onClick={async () => {
+          setBusy(true);
+          setFailed(false);
+          // 성공하면 Google로 넘어가고, Google에서 실패하면 이 화면에 error를 붙여 돌아온다.
+          // Google로 넘어가기 전의 실패(네트워크, 서버 오류)는 여기서 알리고 버튼을 다시 쓸 수 있게 한다.
+          const ok = await succeeded(() =>
+            authClient.signIn.social({ provider: "google", callbackURL: next, errorCallbackURL: "/login" }),
+          );
+          if (!ok) {
+            setBusy(false);
+            setFailed(true);
+          }
+        }}
+      />
+    </>
   );
 }
 

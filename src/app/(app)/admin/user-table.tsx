@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { buttonClass } from "@/components/ui/button";
 import { Failed, Status } from "@/components/ui/status";
+import { effectiveStatus } from "@/lib/auth/display";
 import type { UserRole, UserStatus } from "@/server/db/auth-schema";
 import { setUserStatusAction } from "./actions";
 
@@ -24,7 +25,8 @@ export function UserTable({ rows, selfId }: { rows: UserRowData[]; selfId: strin
     order: rows.map((r) => r.id),
     pendingCount: rows.filter((r) => r.status === "pending").length,
   }));
-  const [statuses, setStatuses] = useState<Record<string, UserStatus>>({});
+  // 이 화면에서 바꾼 상태. 서버 값이 바꾸기 전 값 그대로인 동안만 보여 준다(effectiveStatus).
+  const [statuses, setStatuses] = useState<Record<string, { from: UserStatus; to: UserStatus }>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [failed, setFailed] = useState<Record<string, boolean>>({});
   const [announcement, setAnnouncement] = useState("");
@@ -60,7 +62,7 @@ export function UserTable({ rows, selfId }: { rows: UserRowData[]; selfId: strin
     }
     const who = user.name.trim() || user.email;
     focusAfter.current = user.id;
-    setStatuses((s) => ({ ...s, [user.id]: next }));
+    setStatuses((s) => ({ ...s, [user.id]: { from: user.status, to: next } }));
     setAnnouncement(
       next === "blocked"
         ? `${who} 님의 사용을 멈췄습니다`
@@ -86,7 +88,7 @@ export function UserTable({ rows, selfId }: { rows: UserRowData[]; selfId: strin
         </thead>
         <tbody>
           {ordered.map((user, index) => {
-            const status = statuses[user.id] ?? user.status;
+            const status = effectiveStatus(user.status, statuses[user.id]);
             const isSelf = user.id === selfId;
             const isBusy = busy[user.id] === true;
             const hasName = user.name.trim() !== "";
