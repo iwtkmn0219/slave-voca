@@ -141,6 +141,89 @@
 
 - [ ] **Step 4:** 커밋한다. 메시지: `feat(c3): mobile study layout with sticky answer bar (Designer C rules part 2)`
 
+### Task 2b: Designer 사전 검수 수정 3건(2026-10-17 추가)
+
+Designer가 PM 스크린샷을 미리 보고 요청한 수정이다. 패치 파일에는 없다. 아래 diff대로 직접 고친다(PM 프로토타입에서 확인).
+
+**Files:**
+- Modify:
+  - `src/app/(app)/study/study-session.tsx`
+  - `src/app/(app)/documents/[id]/word-table.tsx`
+  - `src/components/ui/status.tsx`
+  - `src/app/(app)/documents/page.tsx`
+
+**1. "발음기호 없음"은 sans로 쓴다(개편안 3.3).** 지금은 `font-en`이라, Gentium에 없는 한글을 대체 세리프 글꼴이 그리며 자간이 벌어진다.
+
+```diff
+// study-session.tsx (뒷면 발음기호 줄)
++            {/* 발음기호가 없을 때의 안내는 한글이라 영어 글꼴(Gentium)이 아닌 sans로 쓴다(개편안 3.3) */}
+             <p
+-              className={`mt-1 font-en text-[19px] max-sm:text-[17px] ${card.phonetic ? "text-muted" : "text-[15px] text-muted max-sm:text-[15px]"}`}
++              className={`mt-1 text-muted ${card.phonetic ? "font-en text-[19px] max-sm:text-[17px]" : "font-sans text-[15px]"}`}
+             >
+
+// word-table.tsx (단어 칸)
+-                  <div className="font-en text-sm text-muted">{r.phonetic ?? "발음기호 없음"}</div>
++                  {r.phonetic ? (
++                    <div className="font-en text-sm text-muted">{r.phonetic}</div>
++                  ) : (
++                    <div className="text-[15px] text-muted">발음기호 없음</div>
++                  )}
+```
+
+**2. 실패·한도 표시는 굵은 칸 안에서도 보통 굵기로 쓴다.** 복습 카드의 뜻 칸(700) 안에서 "문맥 뜻을 만들지 못했습니다"가 굵게 나왔다.
+
+```diff
+// status.tsx
+-    <span className="inline-flex items-center gap-1.5 text-[13px] text-muted">
++    <span className="inline-flex items-center gap-1.5 text-[13px] font-normal text-muted">
+       <span aria-hidden className="w-2.5 border-t-2 border-dashed border-again" />
+ …
+-    <span className={`inline-flex items-baseline gap-1.5 whitespace-normal text-muted ${className}`}>
++    <span className={`inline-flex items-baseline gap-1.5 font-normal whitespace-normal text-muted ${className}`}>
+```
+
+**3. 문서 목록 360px:** 640px 미만에서는 종류·단어 열을 숨긴다(둘 다 상세 화면 제목 아래에 있다). 상태·날짜 칸은 줄바꿈하지 않고 폭을 내용 크기로 둔다. PM 실측으로 제목 칸이 약 100px에서 **199px**가 됐다.
+
+```diff
+// documents/page.tsx
+-            <th className="w-20 px-3 py-2">종류</th>
+-            <th className="w-[130px] px-3 py-2">상태</th>
+-            <th className="w-[110px] px-3 py-2 text-right">단어</th>
+-            <th className="w-[120px] px-3 py-2 text-right">올린 날</th>
++            <th className="w-20 px-3 py-2 max-sm:hidden">종류</th>
++            <th className="w-[130px] px-3 py-2 max-sm:w-auto">상태</th>
++            <th className="w-[110px] px-3 py-2 text-right max-sm:hidden">단어</th>
++            <th className="w-[120px] px-3 py-2 text-right max-sm:w-auto">올린 날</th>
+ …
+-                <td className="px-3 py-2.5 text-sm">{KIND_LABEL[doc.kind]}</td>
+-                <td className="px-3 py-2.5">
++                <td className="px-3 py-2.5 text-sm max-sm:hidden">{KIND_LABEL[doc.kind]}</td>
++                <td className="px-3 py-2.5 whitespace-nowrap">
+                   <DocumentStatusLabel status={doc.status} />
+                 </td>
+-                <td className="px-3 py-2.5 text-right text-sm tabular-nums">
++                <td className="px-3 py-2.5 text-right text-sm tabular-nums max-sm:hidden">
+ …
+-                <td className="px-3 py-2.5 text-right text-sm text-muted tabular-nums">
++                <td className="px-3 py-2.5 text-right text-sm whitespace-nowrap text-muted tabular-nums">
+```
+
+- [ ] **Step 1:** 위 diff대로 고친다.
+- [ ] **Step 2:** 확인한다.
+
+  ```bash
+  npm run typecheck && npm run lint && npx vitest run && npm run build
+  ```
+
+  Expected: 254 passed, 오류 0
+
+- [ ] **Step 3:** 커밋한다. 메시지: `fix(c3): sans for missing phonetic, normal weight for Failed/Limited, compact document list on phones`
+- [ ] **Step 4:** Task 3 확인 때 Designer가 지정한 세 장으로 본다.
+  - `limit-390-dark`: "발음기호 없음"이 sans이고, "문맥 뜻을 만들지 못했습니다"가 보통 굵기다.
+  - 문서 상세 360: `latent` 행의 "발음기호 없음"이 sans다.
+  - 문서 목록 360: 열이 제목·상태·올린 날 셋이고, 날짜가 한 줄이다.
+
 ### Task 3: 헤드리스 확인과 Designer 검수
 
 - [ ] **Step 1:** 헤드리스 Edge로 확인한다.
@@ -184,4 +267,5 @@
   - 9장 나머지 화면: Task 1(입력칸 16px, 상단 바). 나머지는 이미 맞았다. PM이 360에서 10개 화면을 쟀더니 모두 `scrollWidth` 360이었다. 표는 감싼 상자만 스크롤하고, 홈·설정은 이미 1열이다.
   - 10장 확인: Task 3
 - **C-1 Minor 둘:** ④는 Task 1에서 고쳤다. ③은 규칙 4.2에 맞으므로 그대로 둔다.
+- **Designer 사전 검수(2026-10-17):** 판단 4건은 모두 그대로 좋다고 했다. 수정 3건은 Task 2b로 더했다. 관리 표 360에서 이메일이 꺾이는 것은 고치지 않는다(PC용 화면, 상자 안 스크롤).
 - **남는 것:** 실제 iPhone·Android에서 자동 발음과 safe-area는 C-2 배포 뒤 사용자 폰으로 확인한다(설계서 4.4).
