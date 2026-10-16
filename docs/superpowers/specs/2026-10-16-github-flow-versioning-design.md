@@ -10,13 +10,13 @@
 
 | 브랜치 | 용도 | 들어오는 길 |
 |---|---|---|
-| `main` | 배포용. 늘 릴리스된 상태다. 릴리스 태그는 main에만 단다 | `development`에서 오는 릴리스 PR, 핫픽스 PR |
-| `development` | 개발 통합. 다음 릴리스에 들어갈 기능이 모인다. **기본 브랜치** | 작업 브랜치 PR |
+| `main` | 배포용. 늘 릴리스된 상태다. 릴리스 태그는 main에만 단다. **기본 브랜치** | `development`에서 오는 릴리스 PR, 핫픽스 PR |
+| `development` | 개발 통합. 다음 릴리스에 들어갈 기능이 모인다 | 작업 브랜치 PR |
 | `feat/…`, `fix/…`, `docs/…`, `chore/…` | 작업 하나(마일스톤, 고치기, PM 문서, 설정) | `origin/development`에서 딴다 |
 | `hotfix/…` | 배포된 버전의 급한 고치기 | `origin/main`에서 딴다 |
 
 - `main`과 `development`에는 직접 커밋하거나 push하지 않는다. 둘 다 규칙 세트로 막는다(4장).
-- 기본 브랜치를 `development`로 둔다. 그래야 `gh pr create`가 기본으로 development를 향하고, 실수로 main에 PR을 여는 일이 줄어든다. 그래도 PR을 열 때는 `--base`를 항상 적는다.
+- 기본 브랜치는 `main`이다(2026-10-16 사용자 결정. 처음에는 development였다). 저장소를 연 사람이 릴리스된 안정 버전을 먼저 본다. 그래서 `gh pr create`의 기본 대상도 main이다. **PR을 열 때는 `--base development`를 반드시 적는다**(릴리스·핫픽스만 `--base main`).
 
 ## 2. 흐름
 
@@ -98,7 +98,7 @@ v0.4.0은 development를 만들기 전이라 예외로 설정 PR을 main에 바�
 - **저장소 설정:**
   - squash·rebase 병합을 끄고 병합 커밋만 켠다.
   - 병합한 브랜치는 자동으로 지운다. 규칙 세트가 삭제를 막으므로 `development`는 릴리스 PR을 병합해도 지워지지 않는다.
-  - 기본 브랜치는 `development`다.
+  - 기본 브랜치는 `main`이다(1장).
 - `CONTRIBUTING.md`에 1~3장을 짧게 옮기고, README에서 링크한다.
 
 ## 5. 범위 밖

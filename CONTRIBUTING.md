@@ -6,12 +6,12 @@
 
 | 브랜치 | 용도 |
 |---|---|
-| `main` | 배포용. 릴리스된 상태만 있고, 릴리스 태그는 여기에만 단다 |
-| `development` | 개발 통합(기본 브랜치). 다음 릴리스에 들어갈 기능이 모인다 |
+| `main` | 배포용(기본 브랜치). 릴리스된 상태만 있고, 릴리스 태그는 여기에만 단다 |
+| `development` | 개발 통합. 다음 릴리스에 들어갈 기능이 모인다 |
 | `feat/…`, `fix/…`, `docs/…`, `chore/…` | 작업 브랜치. `development`에서 따서 `development`로 PR |
 | `hotfix/…` | 배포된 버전의 급한 고치기. `main`에서 따서 `main`으로 PR |
 
-`main`과 `development`는 직접 커밋할 수 없고 PR로만 바뀐다(규칙 세트).
+`main`과 `development`는 직접 커밋할 수 없고 PR로만 바뀐다(규칙 세트). 기본 브랜치가 `main`이므로 작업 PR은 반드시 `--base development`로 연다.
 
 ## PR
 
