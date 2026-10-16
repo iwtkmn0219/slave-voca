@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addUser, USER } from '../helpers/users';
 import { createDb, type Db } from '@/server/db/client';
 import { alertLog } from '@/server/db/schema';
-import { notify, resetThrottleForTest, shouldSendThrottled, webhookBody } from '@/server/alerts/notify';
+import { notify, notifyServerError, resetThrottleForTest, shouldSendThrottled, webhookBody } from '@/server/alerts/notify';
 import { reportUsageLimit, reserveMeaningUsage, UsageLimitError } from '@/server/services/meaning-usage';
 
 beforeEach(() => {
@@ -100,5 +100,42 @@ describe('usage alerts', () => {
     reportUsageLimit(db, USER, err, { now: NOW, limits: { monthlyWords: 4000, monthlyBudgetUsd: 5 } });
     await flush();
     expect(sent).toEqual(['user-a (user-a@example.com) 님이 이번 달 한도(4000단어)에 닿았습니다.']);
+  });
+});
+
+describe('notifyServerError', () => {
+  it('sends only the error class, code and status, never the message', async () => {
+    const sent: string[] = [];
+    vi.stubEnv('ALERT_WEBHOOK_URL', 'https://discord.com/api/webhooks/1/x');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) => {
+        sent.push((JSON.parse(init.body as string) as { content: string }).content);
+        return new Response(null, { status: 204 });
+      }),
+    );
+    // 쿼리 오류 메시지에는 문장·뜻 같은 값이 들어갈 수 있고, API 오류에는 키가 들어갈 수 있다.
+    const err = Object.assign(new Error('Failed query: insert into occurrences params: The secret sentence, AIzaSyFAKEKEY'), {
+      name: 'SqliteError',
+      code: 'SQLITE_CONSTRAINT',
+      status: 503,
+    });
+    await notifyServerError('POST /documents/1 · action', err);
+    expect(sent).toEqual(['서버 오류 (POST /documents/1 · action)\nSqliteError · SQLITE_CONSTRAINT · 503']);
+  });
+
+  it('drops a code that is not a plain identifier, and still names plain non-Error throws', async () => {
+    const sent: string[] = [];
+    vi.stubEnv('ALERT_WEBHOOK_URL', 'https://discord.com/api/webhooks/1/x');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) => {
+        sent.push((JSON.parse(init.body as string) as { content: string }).content);
+        return new Response(null, { status: 204 });
+      }),
+    );
+    await notifyServerError('a', Object.assign(new Error('x'), { code: 'has spaces and a secret' }));
+    await notifyServerError('b', 'a thrown string with a secret');
+    expect(sent).toEqual(['서버 오류 (a)\nError', '서버 오류 (b)\n오류']);
   });
 });

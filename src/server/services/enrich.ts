@@ -62,12 +62,13 @@ async function fillMeanings(
   model: MeaningModel | null,
   meter: UsageMeter | null,
 ) {
-  const rows = listMeaningRequests(db, userId, occurrenceIds);
-  if (!model) {
-    markMeaningsFailed(db, rows.map((r) => r.id));
-    return;
-  }
+  // 맡아 둔 요청은 어떤 경로로 끝나든(뜻 조회가 먼저 실패해도) 정산한다.
   try {
+    const rows = listMeaningRequests(db, userId, occurrenceIds);
+    if (!model) {
+      markMeaningsFailed(db, rows.map((r) => r.id));
+      return;
+    }
     await generateAndStore(db, rows, model, meter);
   } finally {
     meter?.finish();

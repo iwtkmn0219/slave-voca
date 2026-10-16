@@ -61,10 +61,25 @@ export function resetThrottleForTest(): void {
   lastSent.clear();
 }
 
-// 서버 오류 알림. 같은 오류(장소+메시지)는 10분에 한 번.
+// 오류에서 알림에 실어도 안전한 것만 뽑는다: 종류(name), code, status. 메시지는 싣지 않는다.
+// 쿼리 오류 메시지에는 문장·뜻 같은 값이, API 오류에는 요청 내용이 들어갈 수 있다. 자세한 내용은 서버 로그에 있다.
+// 영문·숫자·_ . - 만으로 된 짧은 값만 받는다.
+const SAFE_LABEL = /^[\w.-]{1,60}$/;
+function safeLabel(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const text = String(value);
+  return SAFE_LABEL.test(text) ? text : null;
+}
+
+export function errorLabel(err: unknown): string {
+  const { code, status } = (typeof err === 'object' && err !== null ? err : {}) as { code?: unknown; status?: unknown };
+  const name = err instanceof Error ? safeLabel(err.name) : null;
+  return [name ?? '오류', safeLabel(code), safeLabel(status)].filter((p): p is string => p !== null).join(' · ');
+}
+
+// 서버 오류 알림. 같은 오류(장소+종류+code+status)는 10분에 한 번.
 export async function notifyServerError(where: string, err: unknown): Promise<void> {
-  const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-  const short = message.slice(0, 300);
-  if (!shouldSendThrottled(`${where}|${short}`, Date.now())) return;
-  await notify(`서버 오류 (${where})\n${short}`);
+  const label = errorLabel(err);
+  if (!shouldSendThrottled(`${where}|${label}`, Date.now())) return;
+  await notify(`서버 오류 (${where})\n${label}`);
 }
