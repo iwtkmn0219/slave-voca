@@ -31,6 +31,10 @@
   --shadow-2:
     0 4px 16px light-dark(rgb(34 32 28 / 0.08), transparent), 0 1px 3px light-dark(rgb(34 32 28 / 0.06), transparent),
     0 6px 20px light-dark(transparent, rgb(0 0 0 / 0.45));
+  /* Google 로그인 버튼 전용(Google 브랜드 가이드의 Light/Dark 테마 값 그대로). 앱 토큰을 섞지 않는다 */
+  --g-fill: light-dark(#ffffff, #131314);
+  --g-stroke: light-dark(#747775, #8e918f);
+  --g-text: light-dark(#1f1f1f, #e3e3e3);
 }
 
 :root[data-theme="light"] {

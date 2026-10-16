@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### 추가
+- Google 계정 로그인과 가입 승인. 처음 가입한 계정은 관리자가 승인할 때까지 승인 대기 화면만 본다. 관리자(`ADMIN_EMAILS`)는 `/admin`에서 승인·사용 중지·다시 허용을 한다.
+- 개발 전용 로그인(`AUTH_DEV_LOGIN=1`, localhost 주소에서만).
+
+### 업그레이드 시 주의
+- 새 환경변수가 필요하다: `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS`. README "Google 로그인 설정"을 따른다.
+- DB 마이그레이션 `0005_auth`(로그인 표)가 실행 때 자동으로 적용된다.
+
 ## [0.5.0] - 2026-10-16
 
 ### 바뀜

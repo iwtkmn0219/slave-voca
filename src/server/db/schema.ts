@@ -98,3 +98,5 @@ export const settings = sqliteTable('settings', {
 export type DocumentRow = typeof documents.$inferSelect;
 export type CandidateRow = typeof candidates.$inferSelect;
 export type WordRow = typeof words.$inferSelect;
+
+export * from './auth-schema';
