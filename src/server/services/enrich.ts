@@ -1,8 +1,7 @@
 import { mapWithConcurrency } from '@/lib/async/pool';
 import { createGeminiMeaningModel } from '@/lib/meaning/gemini';
 import { generateMeanings, type MeaningModel } from '@/lib/meaning/generate';
-import { withCmudictFirst } from '@/lib/phonetic/cmudict';
-import { createPhoneticLookup } from '@/lib/phonetic/lookup';
+import { createCmudictPhonetic } from '@/lib/phonetic/cmudict';
 import type { Db } from '../db/client';
 import {
   listMeaningRequests,
@@ -32,9 +31,8 @@ export function defaultMeaningModel(): MeaningModel | null {
 export function defaultEnrichDeps(): EnrichDeps {
   return {
     meaningModel: defaultMeaningModel(),
-    // CMUdict를 먼저 쓰고, 없는 단어만 사전 API로 찾는다. API는 저장마다 새 차단기를 쓴다
-    // (사전 API가 죽어 있으면 연속 5번 실패 후 나머지 조회를 건너뛴다).
-    lookupPhonetic: withCmudictFirst(createPhoneticLookup()),
+    // 발음기호는 CMUdict에서만 찾는다(네트워크 없음).
+    lookupPhonetic: createCmudictPhonetic(),
   };
 }
 

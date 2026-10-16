@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { arpabetToIpa } from '@/lib/phonetic/arpabet';
-import { cmudictLookup, createCmudict, withCmudictFirst } from '@/lib/phonetic/cmudict';
+import { cmudictLookup, createCmudict, createCmudictPhonetic } from '@/lib/phonetic/cmudict';
 
 describe('arpabetToIpa', () => {
   it('converts phones and marks stress before the onset consonant', () => {
@@ -48,27 +48,20 @@ describe('cmudictLookup', () => {
   });
 });
 
-describe('withCmudictFirst', () => {
-  it('uses CMUdict first and only calls the API when CMUdict has nothing', async () => {
-    const asked: string[] = [];
-    const api = async (w: string) => {
-      asked.push(w);
-      return w === 'dmodel' ? null : '/api/';
-    };
-    const lookup = withCmudictFirst(api, (w) => (w === 'robust' ? '/roʊˈbʌst/' : null));
+describe('createCmudictPhonetic', () => {
+  it('returns the CMUdict pronunciation, or null when CMUdict has none', async () => {
+    const lookup = createCmudictPhonetic((w) => (w === 'robust' ? '/roʊˈbʌst/' : null));
     expect(await lookup('robust')).toBe('/roʊˈbʌst/');
-    expect(await lookup('softmax')).toBe('/api/');
-    expect(await lookup('dmodel')).toBeNull();
-    expect(asked).toEqual(['softmax', 'dmodel']);
+    expect(await lookup('softmax')).toBeNull();
   });
 
-  it('falls back to the API and logs once when CMUdict itself fails', async () => {
+  it('returns null and logs once when CMUdict itself fails', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const lookup = withCmudictFirst(async () => '/api/', () => {
+    const lookup = createCmudictPhonetic(() => {
       throw new Error('cmudict.txt not found');
     });
-    expect(await lookup('robust')).toBe('/api/');
-    expect(await lookup('paradigm')).toBe('/api/');
+    expect(await lookup('robust')).toBeNull();
+    expect(await lookup('paradigm')).toBeNull();
     expect(errors).toHaveBeenCalledTimes(1);
     errors.mockRestore();
   });
