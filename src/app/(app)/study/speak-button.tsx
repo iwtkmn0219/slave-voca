@@ -27,10 +27,13 @@ export function SpeakButton({ text }: { text: string }) {
   return (
     <button
       type="button"
-      onClick={() => speak(text)}
+      onClick={(e) => {
+        e.stopPropagation(); // 앞면 카드 탭(뒷면 열기)으로 번지지 않게(C 화면 규칙 7.5)
+        speak(text);
+      }}
       onMouseDown={keepFocus}
       aria-label={`${text} 발음 듣기`}
-      className="grid size-9 shrink-0 place-items-center rounded-full border border-line-strong bg-surface text-ink-2 hover:bg-sunken"
+      className="tap relative grid size-9 shrink-0 place-items-center rounded-full border border-line-strong bg-surface text-ink-2 after:absolute after:-inset-1 after:content-[''] hover:bg-sunken active:bg-sunken max-sm:size-10"
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M11 5 6 9H3v6h3l5 4z" />

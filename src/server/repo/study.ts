@@ -109,6 +109,11 @@ export function getStudyQueue(db: Db, userId: string, now: Date, dailyNewLimit: 
   }));
 }
 
+// 이 사용자에게 카드가 하나라도 있는지. 복습 빈 화면에서 "지금 없음"과 "아직 없음"을 나눈다.
+export function hasAnyCard(db: Db, userId: string): boolean {
+  return db.select({ id: words.id }).from(words).where(eq(words.userId, userId)).limit(1).get() !== undefined;
+}
+
 export function countStudyToday(
   db: Db,
   userId: string,
