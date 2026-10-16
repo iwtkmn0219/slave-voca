@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M6-1 로그인 목업</title>
+<!-- 목업 전용 글꼴 로딩. 실제 구현은 지금처럼 next/font로 자체 호스팅한다 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gentium+Book+Plus:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* ── 토큰: src/app/globals.css와 같은 값 ── */
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f4f1ea, #171614);
+  --surface: light-dark(#fbfaf7, #1f1e1b);
+  --sunken: light-dark(#eeeae1, #141311);
+  --line: light-dark(#e2ddd2, #2f2d29);
+  --line-strong: light-dark(#cec7b8, #403d37);
+  --ink: light-dark(#22201c, #ece7dd);
+  --ink-2: light-dark(#4a463f, #cfc9bd);
+  --muted: light-dark(#6e685e, #a29b8e);
+  --faint: light-dark(#857e72, #807a70);
+  --accent: light-dark(#2f5d8c, #8db4de);
+  --accent-hover: light-dark(#264d75, #a7c6e8);
+  --accent-soft: light-dark(#e6edf5, #223041);
+  --on-accent: light-dark(#ffffff, #10161e);
+  --mark: light-dark(#f0db8c, rgb(222 178 64 / 0.32));
+  --again: light-dark(#a6463b, #e08a7e);
+  --hard: light-dark(#7f5a0c, #d9b45e);
+  --good: light-dark(#3b7150, #8cc79c);
+  --good-soft: light-dark(#e0eee4, #1e3225);
+  --shadow-1: 0 1px 2px light-dark(rgb(34 32 28 / 0.06), rgb(0 0 0 / 0.4)), 0 1px 1px light-dark(rgb(34 32 28 / 0.04), transparent);
+  --shadow-2: 0 4px 16px light-dark(rgb(34 32 28 / 0.08), transparent), 0 1px 3px light-dark(rgb(34 32 28 / 0.06), transparent), 0 6px 20px light-dark(transparent, rgb(0 0 0 / 0.45));
+  /* 새 토큰: Google 버튼 전용. 값은 Google 브랜드 가이드 그대로(Light / Dark 테마) */
+  --g-fill: light-dark(#ffffff, #131314);
+  --g-stroke: light-dark(#747775, #8e918f);
+  --g-text: light-dark(#1f1f1f, #e3e3e3);
+  --font-ui: "Pretendard Variable", Pretendard, system-ui, sans-serif;
+  --font-en: "Gentium Book Plus", "Noto Serif", Georgia, serif;
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.6 var(--font-ui); word-break: keep-all; -webkit-font-smoothing: antialiased; }
+.en { font-family: var(--font-en); }
+.num { font-variant-numeric: tabular-nums; }
+mark { background: linear-gradient(transparent 55%, var(--mark) 55%); color: inherit; padding: 0 1px; font-weight: 700; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 목업 페이지 틀 (앱에는 없음) */
+.doc-head { max-width: 1240px; margin: 0 auto; padding: 32px 16px 8px; }
+.doc-head h1 { font-size: 22px; margin: 0 0 4px; }
+.doc-head p { margin: 0; color: var(--muted); font-size: 14px; }
+.label { max-width: 1240px; margin: 40px auto 10px; padding: 0 16px; font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.label b { color: var(--ink); font-size: 15px; }
+.frame { max-width: 1208px; margin: 0 auto; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow-2); }
+@media (max-width: 1240px) { .frame { margin: 0 16px; } }
+.row { max-width: 1240px; margin: 0 auto; padding: 0 16px; display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+.phone { width: 375px; height: 700px; border: 1px solid var(--line-strong); border-radius: 18px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow-2); flex: none; }
+.phone-cap { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+
+/* ── 상단 바 ── */
+.nav { height: 52px; display: flex; align-items: center; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--line); background: var(--surface); position: relative; }
+.nav .brand { font-size: 13px; font-weight: 600; color: var(--muted); margin-right: 20px; letter-spacing: .02em; }
+.nav a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 7px; font-size: 14px; color: var(--ink-2); text-decoration: none; }
+.nav a:hover { background: var(--sunken); }
+.nav a[aria-current] { background: var(--sunken); font-weight: 600; color: var(--ink); }
+.nav .badge { font-size: 12px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+.nav .push { margin-left: auto; }
+.acct { display: inline-flex; align-items: center; gap: 8px; margin-left: 8px; padding: 4px 8px 4px 4px; border: 1px solid transparent; border-radius: 7px; background: none; color: var(--ink-2); font-size: 14px; cursor: pointer; }
+.acct:hover, .acct[aria-expanded="true"] { background: var(--sunken); }
+.acct .name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct svg { color: var(--muted); }
+.initial { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; flex: none; }
+.sep { width: 1px; height: 20px; background: var(--line); margin-left: 8px; }
+
+/* 계정 팝오버 */
+.pop { position: absolute; top: 48px; right: 16px; width: 260px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-2); padding: 6px; z-index: 2; }
+.pop .who { padding: 10px 10px 12px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.pop .who b { display: block; font-size: 14px; font-weight: 600; }
+.pop .who span { display: block; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.pop .item { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 7px 10px; border: 0; border-radius: 7px; background: none; color: var(--ink); font-size: 14px; text-align: left; text-decoration: none; cursor: pointer; }
+.pop .item:hover { background: var(--sunken); }
+
+/* ── 공용 부품(앱과 같은 모양) ── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 7px; border: 1px solid; font-weight: 600; cursor: pointer; transition: background-color .15s; }
+.btn.md { padding: 8px 14px; font-size: 14px; }
+.btn.sm { padding: 4px 10px; font-size: 13px; }
+.btn.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.secondary { border-color: var(--line-strong); background: var(--surface); color: var(--ink); }
+.btn.secondary:hover { background: var(--sunken); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--sunken); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+.dot.wait { background: var(--accent); } .dot.ok { background: var(--good); } .dot.err { background: var(--again); } .dot.idle { background: var(--faint); }
+.spin { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--accent); border-right-color: transparent; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.failed { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.failed::before { content: ""; width: 10px; border-top: 2px dashed var(--again); }
+.notice { margin: 0; border-left: 3px solid var(--hard); border-radius: 0 7px 7px 0; background: var(--surface); padding: 10px 14px; font-size: 13px; color: var(--ink-2); }
+.notice.err { border-left-color: var(--again); }
+.tag { border-radius: 4px; padding: 1px 6px; font-size: 11.5px; font-weight: 600; white-space: nowrap; border: 1px solid var(--line-strong); color: var(--muted); }
+
+/* ── Google 버튼(브랜드 가이드: 40px, 왼쪽 12 · 로고 뒤 10 · 오른쪽 12, 1px 안쪽 테두리, 14/20 Medium) ── */
+.gbtn { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 40px; padding: 0 12px 0 42px; border: 0; box-shadow: inset 0 0 0 1px var(--g-stroke); border-radius: 4px; background: var(--g-fill); color: var(--g-text); font: 500 14px/20px "Google Sans", var(--font-ui); letter-spacing: .25px; cursor: pointer; }
+.gbtn svg { position: absolute; left: 12px; top: 10px; width: 20px; height: 20px; }
+.gbtn:hover { background: color-mix(in srgb, var(--g-text) 8%, var(--g-fill)); }
+.gbtn[aria-busy="true"] { cursor: progress; }
+.gbtn[aria-busy="true"] span { opacity: .6; }
+
+/* ── 인증 화면 틀(로그인 · 승인 대기 · 차단) ── */
+.auth { display: flex; justify-content: center; padding: clamp(48px, 12vh, 120px) 16px 64px; }
+.phone .auth { min-height: 0; padding: 48px 16px 32px; }
+.auth-col { width: 100%; max-width: 400px; }
+.wordmark { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .02em; margin: 0 0 28px; }
+.auth h2 { font-size: 24px; line-height: 1.35; font-weight: 700; margin: 0 0 10px; letter-spacing: -.01em; }
+.auth .lede { margin: 0 0 24px; color: var(--ink-2); }
+.auth .fine { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+.auth .eyebrow { margin: 0 0 10px; }
+.stack > * + * { margin-top: 12px; }
+
+/* 로그인 화면의 예시 카드: 이 앱이 만드는 카드 한 장을 그대로 보여 준다 */
+.sample { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-1); padding: 18px 20px 16px; margin: 0 0 24px; }
+.sample .w { font: 700 26px/1.15 var(--font-en); }
+.sample .ipa { font: 400 16px/1.4 var(--font-en); color: var(--muted); margin-top: 4px; }
+.sample .m { font-size: 17px; font-weight: 700; margin-top: 10px; }
+.sample .s { font: 400 14.5px/1.55 var(--font-en); color: var(--ink-2); margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.sample .src { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.sample-cap { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+
+/* 계정 칸(승인 대기 · 차단) */
+.account { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 12px 12px 14px; margin-top: 24px; }
+.account .initial { width: 32px; height: 32px; font-size: 14px; }
+.account .id { flex: 1; min-width: 0; line-height: 1.4; }
+.account .id b { display: block; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account .id span { display: block; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── 관리 화면 ── */
+.page { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+.page h2 { font-size: 26px; margin: 0; }
+.page .sub { color: var(--muted); font-size: 14px; margin: 4px 0 20px; }
+table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-1); }
+th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: 14px; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--sunken); }
+td .n { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+td .e { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+td.date { font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+td.act { text-align: right; white-space: nowrap; }
+td.act .btn + .btn { margin-left: 6px; }
+tr.group td { padding: 0; height: 0; border-bottom: 2px solid var(--line-strong); }
+</style>
+</head>
+<body>
+<script>if(location.hash==="#dark"||location.hash==="#light")document.documentElement.dataset.theme=location.hash.slice(1)</script>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <!-- 자리표시 G. 구현에서는 Google 브랜드 자료 묶음의 표준 색 G 파일을 고치지 않고 그대로 쓴다 -->
+  <symbol id="g" viewBox="0 0 48 48">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </symbol>
+  <symbol id="chev" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="doc-head">
+  <h1>M6-1 로그인 · 가입 승인 목업</h1>
+  <p>A안 「지면」 위에 얹는다. 주소 끝에 #light / #dark를 붙이면 테마를 고정한다. 규칙은 docs/superpowers/specs/2026-10-16-m6-1-auth-screens.md.</p>
+</header>
+
+<!-- ───────── 1. 로그인 ───────── -->
+<div class="label"><b>1. 로그인 /login</b> 상단 바 없음. 처음 온 사람에게 앱이 무엇인지 카드 한 장으로 보여 준다</div>
+<div class="frame">
+  <main class="auth"><div class="auth-col">
+    <p class="wordmark">slave-voca</p>
+    <h2>논문에서 만난 단어를<br>그 문장의 뜻으로 외웁니다</h2>
+    <p class="lede">PDF를 올리면 어려운 영어 단어를 골라 문장 속 뜻과 발음기호를 붙이고, 간격 반복으로 복습하게 합니다.</p>
+    <p class="sample-cap">이런 카드가 만들어집니다</p>
+    <div class="sample" aria-hidden="true">
+      <div class="w">ubiquitous</div>
+      <div class="ipa">/juːˈbɪkwɪtəs/</div>
+      <div class="m">어디서나 널리 쓰이는</div>
+      <div class="s">Self-attention has become <mark>ubiquitous</mark> in sequence modeling tasks.</div>
+    </div>
+    <button class="gbtn"><svg><use href="#g"/></svg><span>Google 계정으로 계속하기</span></button>
+    <p class="fine">초대받은 분만 쓸 수 있습니다. 처음 로그인하면 관리자가 승인한 뒤부터 쓸 수 있습니다.</p>
+  </div></main>
+</div>
+
+<div class="label"><b>1-1. 로그인 실패로 돌아옴</b> 취소는 안내만, 오류는 again 색 줄. 버튼 자체가 다시 시도</div>
+<div class="row">
+  <div style="flex:1 1 360px;max-width:400px">
+    <p class="phone-cap">취소(?error=cancelled)</p>
+    <div class="stack">
+      <p class="notice" style="border-left-color:var(--line-strong)" role="status">로그인을 취소했습니다. 계속하려면 아래 버튼을 다시 눌러 주세요.</p>
+      <button class="gbtn"><svg><use href="#g"/></svg><span>Google 계정으로 계속하기</span></button>
+    </div>
+  </div>
+  <div style="flex:1 1 360px;max-width:400px">
+    <p class="phone-cap">오류(그 밖의 모든 실패)</p>
+    <div class="stack">
+      <p class="notice err" role="alert">로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.</p>
+      <button class="gbtn"><svg><use href="#g"/></svg><span>Google 계정으로 계속하기</span></button>
+    </div>
+  </div>
+  <div style="flex:1 1 360px;max-width:400px">
+    <p class="phone-cap">누른 직후(Google로 넘어가는 동안)</p>
+    <div class="stack">
+      <button class="gbtn" aria-busy="true" disabled><svg><use href="#g"/></svg><span>Google 계정으로 계속하기</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────── 2. 승인 대기 · 3. 차단 ───────── -->
+<div class="label"><b>2. 승인 대기</b> · <b>3. 차단</b> 같은 틀. 상단 바 없음. 계정 칸과 로그아웃만</div>
+<div class="row">
+  <div class="frame" style="flex:1 1 560px;margin:0">
+    <main class="auth"><div class="auth-col">
+      <p class="wordmark">slave-voca</p>
+      <p class="eyebrow"><span class="status"><span class="dot wait"></span>승인 대기</span></p>
+      <h2>승인을 기다리고 있습니다</h2>
+      <p class="lede" style="margin:0">관리자가 확인하면 바로 쓸 수 있습니다. 승인이 끝나면 이 화면이 저절로 넘어가니, 나중에 이 주소로 다시 들어오면 됩니다.</p>
+      <div class="account">
+        <span class="initial">김</span>
+        <div class="id"><b>김연구</b><span>yeongu.kim@gmail.com</span></div>
+        <button class="btn ghost sm">로그아웃</button>
+      </div>
+      <p class="fine">다른 계정으로 들어가려면 로그아웃한 뒤 다시 로그인하세요.</p>
+    </div></main>
+  </div>
+  <div class="frame" style="flex:1 1 560px;margin:0">
+    <main class="auth"><div class="auth-col">
+      <p class="wordmark">slave-voca</p>
+      <p class="eyebrow"><span class="status"><span class="dot idle"></span>사용 중지됨</span></p>
+      <h2>이 계정으로는 쓸 수 없습니다</h2>
+      <p class="lede" style="margin:0">관리자가 이 계정의 사용을 멈췄습니다. 잘못된 것 같다면 초대해 준 분께 알려 주세요.</p>
+      <div class="account">
+        <span class="initial">이</span>
+        <div class="id"><b>이박사</b><span>dr.lee.lab@gmail.com</span></div>
+        <button class="btn ghost sm">로그아웃</button>
+      </div>
+    </div></main>
+  </div>
+</div>
+
+<div class="label"><b>휴대폰 375px</b> 로그인과 승인 대기를 처음 여는 곳. 줄바꿈만 바뀐다</div>
+<div class="row">
+  <div><p class="phone-cap">로그인</p><div class="phone">
+    <main class="auth"><div class="auth-col">
+      <p class="wordmark">slave-voca</p>
+      <h2>논문에서 만난 단어를<br>그 문장의 뜻으로 외웁니다</h2>
+      <p class="lede">PDF를 올리면 어려운 영어 단어를 골라 문장 속 뜻과 발음기호를 붙이고, 간격 반복으로 복습하게 합니다.</p>
+      <p class="sample-cap">이런 카드가 만들어집니다</p>
+      <div class="sample" aria-hidden="true">
+        <div class="w">ubiquitous</div>
+        <div class="ipa">/juːˈbɪkwɪtəs/</div>
+        <div class="m">어디서나 널리 쓰이는</div>
+        <div class="s">Self-attention has become <mark>ubiquitous</mark> in sequence modeling tasks.</div>
+      </div>
+      <button class="gbtn"><svg><use href="#g"/></svg><span>Google 계정으로 계속하기</span></button>
+      <p class="fine">초대받은 분만 쓸 수 있습니다. 처음 로그인하면 관리자가 승인한 뒤부터 쓸 수 있습니다.</p>
+    </div></main>
+  </div></div>
+  <div><p class="phone-cap">승인 대기</p><div class="phone">
+    <main class="auth"><div class="auth-col">
+      <p class="wordmark">slave-voca</p>
+      <p class="eyebrow"><span class="status"><span class="dot wait"></span>승인 대기</span></p>
+      <h2>승인을 기다리고 있습니다</h2>
+      <p class="lede" style="margin:0">관리자가 확인하면 바로 쓸 수 있습니다. 승인이 끝나면 이 화면이 저절로 넘어가니, 나중에 이 주소로 다시 들어오면 됩니다.</p>
+      <div class="account">
+        <span class="initial">김</span>
+        <div class="id"><b>김연구</b><span>yeongu.kim@gmail.com</span></div>
+        <button class="btn ghost sm">로그아웃</button>
+      </div>
+      <p class="fine">다른 계정으로 들어가려면 로그아웃한 뒤 다시 로그인하세요.</p>
+    </div></main>
+  </div></div>
+</div>
+
+<!-- ───────── 4. 상단 바 ───────── -->
+<div class="label"><b>4. 상단 바</b> 오른쪽 끝: [관리 n](관리자만) · 설정 | 계정</div>
+<div class="frame">
+  <nav class="nav">
+    <span class="brand">slave-voca</span>
+    <a href="#">홈</a><a href="#">복습 <span class="badge">19</span></a><a href="#">문서</a>
+    <a href="#" class="push">설정</a>
+    <span class="sep"></span>
+    <button class="acct" aria-haspopup="true" aria-expanded="false"><span class="initial">김</span><span class="name">김연구</span><svg width="14" height="14"><use href="#chev"/></svg></button>
+  </nav>
+  <div style="height:40px"></div>
+</div>
+<p class="label" style="margin-top:10px">승인된 일반 사용자</p>
+
+<div class="frame" style="margin-top:24px">
+  <nav class="nav">
+    <span class="brand">slave-voca</span>
+    <a href="#">홈</a><a href="#">복습 <span class="badge">19</span></a><a href="#">문서</a>
+    <a href="#" class="push" aria-current="page">관리 <span class="badge">2</span></a>
+    <a href="#">설정</a>
+    <span class="sep"></span>
+    <button class="acct" aria-haspopup="true" aria-expanded="true"><span class="initial">I</span><span class="name">iwtkmn0219</span><svg width="14" height="14"><use href="#chev"/></svg></button>
+    <div class="pop" role="dialog" aria-label="계정">
+      <div class="who"><b>iwtkmn0219</b><span>iwtkmn0219@gmail.com</span></div>
+      <button class="item">로그아웃</button>
+    </div>
+  </nav>
+  <!-- ───────── 5. 관리 화면 ───────── -->
+  <main class="page">
+    <h2>사용자</h2>
+    <p class="sub num">대기 2 · 승인 7 · 사용 중지 1</p>
+    <table>
+      <thead><tr><th>사용자</th><th style="width:150px">상태</th><th style="width:120px">가입</th><th style="width:150px;text-align:right">동작</th></tr></thead>
+      <tbody>
+        <tr><td><div class="n">박석사</div><div class="e">seoksa.park@gmail.com</div></td>
+          <td><span class="status"><span class="dot wait"></span>승인 대기</span></td>
+          <td class="date num">10월 16일 14:32</td>
+          <td class="act"><button class="btn primary sm">승인</button><button class="btn ghost sm">사용 중지</button></td></tr>
+        <tr><td><div class="n">최포닥</div><div class="e">postdoc.choi@snu.ac.kr</div></td>
+          <td><span class="status"><span class="spin"></span>바꾸는 중</span></td>
+          <td class="date num">10월 16일 15:08</td>
+          <td class="act"><button class="btn primary sm" disabled>승인</button><button class="btn ghost sm" disabled>사용 중지</button></td></tr>
+        <tr class="group"><td colspan="4"></td></tr>
+        <tr><td><div class="n">iwtkmn0219 <span class="tag">나</span></div><div class="e">iwtkmn0219@gmail.com</div></td>
+          <td><span class="status"><span class="dot ok"></span>관리자</span></td>
+          <td class="date num">10월 13일 09:00</td>
+          <td class="act"></td></tr>
+        <tr><td><div class="n">김연구</div><div class="e">yeongu.kim@gmail.com</div></td>
+          <td><span class="status"><span class="dot ok"></span>승인됨</span><br><span class="failed" role="alert">바꾸지 못했습니다</span></td>
+          <td class="date num">10월 15일 21:10</td>
+          <td class="act"><button class="btn ghost sm">사용 중지</button></td></tr>
+        <tr><td><div class="n">정학부</div><div class="e">hakbu.jung@korea.ac.kr</div></td>
+          <td><span class="status"><span class="dot ok"></span>승인됨</span></td>
+          <td class="date num">10월 14일 11:47</td>
+          <td class="act"><button class="btn ghost sm">사용 중지</button></td></tr>
+        <tr><td><div class="n">이박사</div><div class="e">dr.lee.lab@gmail.com</div></td>
+          <td><span class="status"><span class="dot idle"></span>사용 중지</span></td>
+          <td class="date num">10월 14일 08:15</td>
+          <td class="act"><button class="btn secondary sm">다시 허용</button></td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+<div style="height:60px"></div>
+</body>
+</html>
