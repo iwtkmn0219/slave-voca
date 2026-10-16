@@ -1,6 +1,6 @@
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { z } from 'zod';
-import type { MeaningModel } from './generate';
+import type { MeaningModel, TokenUsage } from './generate';
 
 export const MEANING_MODEL_ID = 'gemini-3.5-flash-lite';
 
@@ -55,7 +55,7 @@ export class GarbledOutputError extends Error {
 export function createGeminiMeaningModel(
   client: GeminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }),
 ): MeaningModel {
-  return async (batch) => {
+  return async (batch, onUsage) => {
     const response = await client.models.generateContent({
       model: MEANING_MODEL_ID,
       contents: JSON.stringify(batch.map((r) => ({ id: r.id, word: r.word, sentence: r.sentence }))),
@@ -69,6 +69,7 @@ export function createGeminiMeaningModel(
         maxOutputTokens: 16384,
       },
     });
+    onUsage?.(tokenUsage(response.usageMetadata));
     const text = response.text;
     if (!text) {
       const reason = response.candidates?.[0]?.finishReason ?? 'unknown';
@@ -80,5 +81,16 @@ export function createGeminiMeaningModel(
     const garbled = meanings.filter((m) => LOOSE_JAMO.test(m.meaningKo)).length;
     if (garbled > 0) throw new GarbledOutputError(garbled);
     return meanings;
+  };
+}
+
+// 응답의 usageMetadata를 과금 단위로 바꾼다. 사고 토큰은 출력 요금으로 매겨진다(2026-10-17 공식 요금표).
+// 값이 빠진 응답은 0으로 센다.
+export function tokenUsage(
+  meta: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } | undefined,
+): TokenUsage {
+  return {
+    inputTokens: meta?.promptTokenCount ?? 0,
+    outputTokens: (meta?.candidatesTokenCount ?? 0) + (meta?.thoughtsTokenCount ?? 0),
   };
 }

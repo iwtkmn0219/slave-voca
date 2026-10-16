@@ -3,11 +3,16 @@ import {
   createGeminiMeaningModel,
   GarbledOutputError,
   MEANING_MODEL_ID,
+  tokenUsage,
   type GeminiClient,
 } from '@/lib/meaning/gemini';
 
 // models.generateContent만 흉내 내는 가짜 클라이언트. 실제 API는 호출하지 않는다.
-function fakeClient(response: { text?: string; candidates?: { finishReason?: string }[] }) {
+function fakeClient(response: {
+  text?: string;
+  candidates?: { finishReason?: string }[];
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
+}) {
   const calls: Record<string, unknown>[] = [];
   const client = {
     models: {
@@ -95,5 +100,24 @@ describe('createGeminiMeaningModel', () => {
     await expect(createGeminiMeaningModel(broken.client)(batch)).rejects.toThrow();
     const wrongShape = fakeClient({ text: JSON.stringify({ meanings: [{ id: 'x' }] }) });
     await expect(createGeminiMeaningModel(wrongShape.client)(batch)).rejects.toThrow();
+  });
+});
+
+describe('token usage', () => {
+  it('reports every response, counting thinking tokens as output, even when the answer is rejected', async () => {
+    const seen: unknown[] = [];
+    const usageMetadata = { promptTokenCount: 120, candidatesTokenCount: 30, thoughtsTokenCount: 10 };
+    const ok = fakeClient({ text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루다' }] }), usageMetadata });
+    await createGeminiMeaningModel(ok.client)(batch, (u) => seen.push(u));
+    const garbled = fakeClient({ text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '머커뉴ᄆ' }] }), usageMetadata });
+    await expect(createGeminiMeaningModel(garbled.client)(batch, (u) => seen.push(u))).rejects.toThrow(GarbledOutputError);
+    expect(seen).toEqual([
+      { inputTokens: 120, outputTokens: 40 },
+      { inputTokens: 120, outputTokens: 40 },
+    ]);
+  });
+
+  it('counts missing usage as zero', () => {
+    expect(tokenUsage(undefined)).toEqual({ inputTokens: 0, outputTokens: 0 });
   });
 });

@@ -11,8 +11,15 @@ export interface MeaningResult {
   meaningKo: string;
 }
 
+// 모델 응답 하나가 쓴 토큰. 출력에는 사고 토큰이 들어간다(과금 기준과 같다).
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 // 단어 묶음 하나를 받아 문맥 뜻을 돌려주는 모델. 실제 구현은 gemini.ts, 테스트는 가짜를 쓴다.
-export type MeaningModel = (batch: MeaningRequest[]) => Promise<MeaningResult[]>;
+// onUsage: 응답을 받을 때마다(형식이 틀려 예외로 끝나는 응답도) 쓴 토큰을 알린다. 비용 기록(C-1)이 쓴다.
+export type MeaningModel = (batch: MeaningRequest[], onUsage?: (usage: TokenUsage) => void) => Promise<MeaningResult[]>;
 
 // 2026-10-16 실측(M4-4): 200개 묶음보다 50개 묶음이 문맥 오답이 적었다. 묶음은 동시에 보내
 // 논문 한 편(후보 약 200개, 묶음 4~5개)이 한 번에 나간다. 큰 문서는 5개씩 나눠 보낸다.
@@ -50,6 +57,8 @@ export interface RetryOptions {
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
   isRetryable?: (err: unknown) => boolean;
+  // 재시도를 포함한 모든 모델 응답의 토큰을 받는다.
+  onUsage?: (usage: TokenUsage) => void;
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -58,11 +67,11 @@ async function requestWithRetry(
   batch: MeaningRequest[],
   batchNo: number,
   model: MeaningModel,
-  { sleep = wait, random = Math.random, isRetryable = isRetryableError }: RetryOptions,
+  { sleep = wait, random = Math.random, isRetryable = isRetryableError, onUsage }: RetryOptions,
 ): Promise<MeaningResult[]> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await model(batch);
+      return await model(batch, onUsage);
     } catch (err) {
       const { name, garbledCount } = err as { name?: unknown; garbledCount?: unknown };
       if (name === GARBLED_OUTPUT_ERROR) {
