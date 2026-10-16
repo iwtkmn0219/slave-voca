@@ -1,8 +1,6 @@
-// 로그인·승인 대기·차단 화면의 틀. 메뉴 없이 가운데 카드 하나. 좁은 폭에서도 깨지지 않게 한다.
+import { AuthShell } from "@/components/auth/auth-shell";
+
+// 로그인·승인 대기·사용 중지 화면의 틀. 상단 바가 없다(앱 안으로 들어가는 길이 없는 상태).
 export default function AuthLayout({ children }: LayoutProps<"/">) {
-  return (
-    <main className="flex flex-1 items-center justify-center px-4 py-12">
-      <div className="w-full max-w-[400px] rounded-lg border border-line bg-surface p-8 shadow-1">{children}</div>
-    </main>
-  );
+  return <AuthShell>{children}</AuthShell>;
 }

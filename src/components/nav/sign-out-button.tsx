@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { buttonClass } from "@/components/ui/button";
 import { authClient } from "@/lib/auth/client";
 
-// 로그아웃하면 세션 쿠키를 지우고 로그인 화면으로 간다.
-export function SignOutButton() {
+// 로그아웃하면 세션 쿠키를 지우고 로그인 화면으로 간다. 확인 대화상자는 띄우지 않는다.
+// variant: 계정 칸의 ghost 버튼(button) 또는 계정 팝오버의 항목(menu-item).
+export function SignOutButton({ variant = "button" }: { variant?: "button" | "menu-item" }) {
   const [busy, setBusy] = useState(false);
   return (
     <button
@@ -17,7 +19,11 @@ export function SignOutButton() {
         // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.assign("/login");
       }}
-      className="rounded-md px-3 py-1.5 text-ink-2 hover:bg-sunken disabled:opacity-60"
+      className={
+        variant === "button"
+          ? buttonClass({ variant: "ghost", size: "sm" })
+          : "flex w-full items-center rounded-md px-2.5 py-[7px] text-left text-sm text-ink hover:bg-sunken disabled:opacity-60"
+      }
     >
       로그아웃
     </button>

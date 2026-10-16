@@ -1,24 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { GoogleButton } from "@/components/auth/google-button";
+import { buttonClass } from "@/components/ui/button";
 import { authClient } from "@/lib/auth/client";
 
 export function GoogleSignInButton({ next }: { next: string }) {
   const [busy, setBusy] = useState(false);
   return (
-    <button
-      type="button"
-      disabled={busy}
+    <GoogleButton
+      busy={busy}
       onClick={async () => {
         setBusy(true);
         // 성공하면 Google에서 돌아와 홈(→ 상태에 맞는 화면)으로, 실패하면 이 화면에 error를 붙여 돌아온다.
         const { error } = await authClient.signIn.social({ provider: "google", callbackURL: next, errorCallbackURL: "/login" });
         if (error) setBusy(false);
       }}
-      className="w-full rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold hover:bg-sunken disabled:opacity-60"
-    >
-      Google로 계속하기
-    </button>
+    />
   );
 }
 
@@ -53,12 +51,12 @@ export function DevLoginForm({ next }: { next: string }) {
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="rounded-md border border-line bg-surface px-3 py-2 text-sm"
+        className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm"
       />
-      <button type="submit" className="rounded-md bg-sunken px-3 py-2 text-sm font-semibold">
+      <button type="submit" className={buttonClass({ variant: "secondary" })}>
         들어가기
       </button>
-      {message && <p className="text-sm text-danger">{message}</p>}
+      {message && <p className="text-sm text-again">{message}</p>}
     </form>
   );
 }
