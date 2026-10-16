@@ -10,7 +10,7 @@
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "freq:build": "tsx scripts/build-frequency.ts",
+    "freq:build": "python scripts/export-wordfreq.py data/wordfreq-en.txt && tsx scripts/build-frequency.ts data/wordfreq-en.txt",
     "cmudict:build": "tsx scripts/build-cmudict.ts"
   },
   "dependencies": {
