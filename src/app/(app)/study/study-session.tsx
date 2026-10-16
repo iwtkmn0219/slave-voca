@@ -43,6 +43,13 @@ const ANSWER_BUTTONS: { answer: Answer; label: string; key: string; tone: string
   },
 ];
 
+// 응답 시도 id. crypto.randomUUID는 https·localhost에서만 있어, 그 밖(LAN 주소로 폰 확인)에서는 난수 문자열을 쓴다.
+function newAttemptId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 // 응답 저장 실패는 서버 문구 대신 이 문구를 쓴다(C 화면 규칙 7.6).
 const SAVE_FAILED = "응답을 저장하지 못했습니다 · 다시 눌러 주세요";
 // 누른 뒤 이만큼 지나도 저장이 안 끝나면 "저장 중"을 보인다(빠른 망에서 깜박이지 않게).
@@ -231,6 +238,8 @@ export function StudySession({
   // 이번 세션에서 다시 만든 뜻. 응답 뒤 큐에서 빠진 카드를 되돌릴 때도 새 뜻을 살린다.
   const meaningsRef = useRef(new Map<number, RegeneratedMeaning>());
   const locked = useRef(false);
+  // 한 카드의 응답 시도 id. 저장이 실패해 다시 누를 때 같은 id를 보내, 서버가 저장했지만 응답만 유실된 경우에도 한 번만 적용되게 한다.
+  const attempt = useRef<{ wordId: number; id: string } | null>(null);
   const [last, setLast] = useState<LastAnswer | null>(null);
   const [undoNote, setUndoNote] = useState<UndoNote>(null);
 
@@ -255,12 +264,14 @@ export function StudySession({
     locked.current = true;
     startSaving(async () => {
       try {
-        const result = await answerCard(card.wordId, choice);
+        if (attempt.current?.wordId !== card.wordId) attempt.current = { wordId: card.wordId, id: newAttemptId() };
+        const result = await answerCard(card.wordId, choice, attempt.current.id);
         if (result.error !== null) {
           setSaveFailed(true);
           return;
         }
         setSaveFailed(false);
+        attempt.current = null;
         setAnswered((n) => n + 1);
         if (choice === "again") setAgainCount((n) => n + 1);
         setLast({ logId: result.logId, card, choice, prevDue: lastDue.get(card.wordId) });
