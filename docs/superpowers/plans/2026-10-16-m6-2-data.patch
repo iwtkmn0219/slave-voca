@@ -1,0 +1,2444 @@
+diff --git a/drizzle/0006_per_user.sql b/drizzle/0006_per_user.sql
+new file mode 100644
+index 0000000..0b6193b
+--- /dev/null
++++ b/drizzle/0006_per_user.sql
+@@ -0,0 +1,88 @@
++-- M6-2: 문서·단어·아는 단어·설정에 주인(user_id)을 붙인다. 손으로 쓴 마이그레이션이다(drizzle-kit이 만든 SQL은
++-- 기존 행에 넣을 user_id가 없어 실패한다). 기존 데이터는 임시 소유자 legacy-owner에게 묶고, 계정 주인이
++-- npm run db:claim -- <이메일>로 가져간다. 데이터가 하나도 없으면 legacy-owner를 만들지 않는다.
++-- 표를 새로 만들 때 연결된 행(후보·용례·복습 기록)이 지워지지 않도록 client.ts가 외래 키를 끈 채 이 파일을 실행하고,
++-- 끝난 뒤 foreign_key_check로 확인한다.
++INSERT INTO `users` (`id`, `name`, `email`, `status`, `role`)
++SELECT 'legacy-owner', '이전 데이터', 'legacy-owner@localhost', 'blocked', 'user'
++WHERE EXISTS (SELECT 1 FROM `documents`) OR EXISTS (SELECT 1 FROM `words`)
++   OR EXISTS (SELECT 1 FROM `known_words`) OR EXISTS (SELECT 1 FROM `settings`);
++--> statement-breakpoint
++CREATE TABLE `__new_documents` (
++	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
++	`user_id` text NOT NULL,
++	`title` text NOT NULL,
++	`kind` text NOT NULL,
++	`status` text DEFAULT 'extracting' NOT NULL,
++	`error_message` text,
++	`created_at` integer NOT NULL,
++	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
++);
++--> statement-breakpoint
++INSERT INTO `__new_documents` (`id`, `user_id`, `title`, `kind`, `status`, `error_message`, `created_at`)
++SELECT `id`, 'legacy-owner', `title`, `kind`, `status`, `error_message`, `created_at` FROM `documents`;
++--> statement-breakpoint
++DROP TABLE `documents`;
++--> statement-breakpoint
++ALTER TABLE `__new_documents` RENAME TO `documents`;
++--> statement-breakpoint
++CREATE INDEX `documents_user_id_idx` ON `documents` (`user_id`);
++--> statement-breakpoint
++CREATE TABLE `__new_words` (
++	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
++	`user_id` text NOT NULL,
++	`lemma` text NOT NULL,
++	`phonetic` text,
++	`created_at` integer NOT NULL,
++	`due` integer DEFAULT 0 NOT NULL,
++	`stability` real DEFAULT 0 NOT NULL,
++	`difficulty` real DEFAULT 0 NOT NULL,
++	`elapsed_days` integer DEFAULT 0 NOT NULL,
++	`scheduled_days` integer DEFAULT 0 NOT NULL,
++	`learning_steps` integer DEFAULT 0 NOT NULL,
++	`reps` integer DEFAULT 0 NOT NULL,
++	`lapses` integer DEFAULT 0 NOT NULL,
++	`state` integer DEFAULT 0 NOT NULL,
++	`last_review` integer,
++	`introduced_at` integer,
++	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
++);
++--> statement-breakpoint
++INSERT INTO `__new_words` (`id`, `user_id`, `lemma`, `phonetic`, `created_at`, `due`, `stability`, `difficulty`,
++  `elapsed_days`, `scheduled_days`, `learning_steps`, `reps`, `lapses`, `state`, `last_review`, `introduced_at`)
++SELECT `id`, 'legacy-owner', `lemma`, `phonetic`, `created_at`, `due`, `stability`, `difficulty`,
++  `elapsed_days`, `scheduled_days`, `learning_steps`, `reps`, `lapses`, `state`, `last_review`, `introduced_at` FROM `words`;
++--> statement-breakpoint
++DROP TABLE `words`;
++--> statement-breakpoint
++ALTER TABLE `__new_words` RENAME TO `words`;
++--> statement-breakpoint
++CREATE UNIQUE INDEX `words_user_id_lemma_unique` ON `words` (`user_id`,`lemma`);
++--> statement-breakpoint
++CREATE TABLE `__new_known_words` (
++	`user_id` text NOT NULL,
++	`lemma` text NOT NULL,
++	`created_at` integer NOT NULL,
++	PRIMARY KEY(`user_id`, `lemma`),
++	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
++);
++--> statement-breakpoint
++INSERT INTO `__new_known_words` (`user_id`, `lemma`, `created_at`) SELECT 'legacy-owner', `lemma`, `created_at` FROM `known_words`;
++--> statement-breakpoint
++DROP TABLE `known_words`;
++--> statement-breakpoint
++ALTER TABLE `__new_known_words` RENAME TO `known_words`;
++--> statement-breakpoint
++CREATE TABLE `__new_settings` (
++	`user_id` text NOT NULL,
++	`key` text NOT NULL,
++	`value` text NOT NULL,
++	PRIMARY KEY(`user_id`, `key`),
++	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
++);
++--> statement-breakpoint
++INSERT INTO `__new_settings` (`user_id`, `key`, `value`) SELECT 'legacy-owner', `key`, `value` FROM `settings`;
++--> statement-breakpoint
++DROP TABLE `settings`;
++--> statement-breakpoint
++ALTER TABLE `__new_settings` RENAME TO `settings`;
+diff --git a/drizzle/meta/0006_snapshot.json b/drizzle/meta/0006_snapshot.json
+new file mode 100644
+index 0000000..bd34dd2
+--- /dev/null
++++ b/drizzle/meta/0006_snapshot.json
+@@ -0,0 +1,964 @@
++{
++  "version": "6",
++  "dialect": "sqlite",
++  "id": "7a80546b-c37a-4c6a-bc79-4b7587f52c37",
++  "prevId": "66f308e1-6e6d-42bc-b08b-5b0e4219b4d7",
++  "tables": {
++    "candidates": {
++      "name": "candidates",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "document_id": {
++          "name": "document_id",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "lemma": {
++          "name": "lemma",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "surface": {
++          "name": "surface",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "sentence": {
++          "name": "sentence",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "count": {
++          "name": "count",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "is_existing": {
++          "name": "is_existing",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "in_dictionary": {
++          "name": "in_dictionary",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": true
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "candidates_document_id_documents_id_fk": {
++          "name": "candidates_document_id_documents_id_fk",
++          "tableFrom": "candidates",
++          "tableTo": "documents",
++          "columnsFrom": [
++            "document_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "documents": {
++      "name": "documents",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "title": {
++          "name": "title",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "kind": {
++          "name": "kind",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "status": {
++          "name": "status",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'extracting'"
++        },
++        "error_message": {
++          "name": "error_message",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "documents_user_id_idx": {
++          "name": "documents_user_id_idx",
++          "columns": [
++            "user_id"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "documents_user_id_users_id_fk": {
++          "name": "documents_user_id_users_id_fk",
++          "tableFrom": "documents",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "known_words": {
++      "name": "known_words",
++      "columns": {
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "lemma": {
++          "name": "lemma",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "known_words_user_id_users_id_fk": {
++          "name": "known_words_user_id_users_id_fk",
++          "tableFrom": "known_words",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {
++        "known_words_user_id_lemma_pk": {
++          "columns": [
++            "user_id",
++            "lemma"
++          ],
++          "name": "known_words_user_id_lemma_pk"
++        }
++      },
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "occurrences": {
++      "name": "occurrences",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "word_id": {
++          "name": "word_id",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "document_id": {
++          "name": "document_id",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "surface": {
++          "name": "surface",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "sentence": {
++          "name": "sentence",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "meaning_ko": {
++          "name": "meaning_ko",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "meaning_status": {
++          "name": "meaning_status",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'pending'"
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "occurrences_word_id_words_id_fk": {
++          "name": "occurrences_word_id_words_id_fk",
++          "tableFrom": "occurrences",
++          "tableTo": "words",
++          "columnsFrom": [
++            "word_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        },
++        "occurrences_document_id_documents_id_fk": {
++          "name": "occurrences_document_id_documents_id_fk",
++          "tableFrom": "occurrences",
++          "tableTo": "documents",
++          "columnsFrom": [
++            "document_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "review_logs": {
++      "name": "review_logs",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "word_id": {
++          "name": "word_id",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "rating": {
++          "name": "rating",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "reviewed_at": {
++          "name": "reviewed_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "prev_card": {
++          "name": "prev_card",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "review_logs_word_id_words_id_fk": {
++          "name": "review_logs_word_id_words_id_fk",
++          "tableFrom": "review_logs",
++          "tableTo": "words",
++          "columnsFrom": [
++            "word_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "settings": {
++      "name": "settings",
++      "columns": {
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "key": {
++          "name": "key",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "value": {
++          "name": "value",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "settings_user_id_users_id_fk": {
++          "name": "settings_user_id_users_id_fk",
++          "tableFrom": "settings",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {
++        "settings_user_id_key_pk": {
++          "columns": [
++            "user_id",
++            "key"
++          ],
++          "name": "settings_user_id_key_pk"
++        }
++      },
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "words": {
++      "name": "words",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "lemma": {
++          "name": "lemma",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "phonetic": {
++          "name": "phonetic",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "due": {
++          "name": "due",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "0"
++        },
++        "stability": {
++          "name": "stability",
++          "type": "real",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "difficulty": {
++          "name": "difficulty",
++          "type": "real",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "elapsed_days": {
++          "name": "elapsed_days",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "scheduled_days": {
++          "name": "scheduled_days",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "learning_steps": {
++          "name": "learning_steps",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "reps": {
++          "name": "reps",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "lapses": {
++          "name": "lapses",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "state": {
++          "name": "state",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "last_review": {
++          "name": "last_review",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "introduced_at": {
++          "name": "introduced_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "words_user_id_lemma_unique": {
++          "name": "words_user_id_lemma_unique",
++          "columns": [
++            "user_id",
++            "lemma"
++          ],
++          "isUnique": true
++        }
++      },
++      "foreignKeys": {
++        "words_user_id_users_id_fk": {
++          "name": "words_user_id_users_id_fk",
++          "tableFrom": "words",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "accounts": {
++      "name": "accounts",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "account_id": {
++          "name": "account_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "provider_id": {
++          "name": "provider_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "access_token": {
++          "name": "access_token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "refresh_token": {
++          "name": "refresh_token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "id_token": {
++          "name": "id_token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "access_token_expires_at": {
++          "name": "access_token_expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "refresh_token_expires_at": {
++          "name": "refresh_token_expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "scope": {
++          "name": "scope",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "password": {
++          "name": "password",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        }
++      },
++      "indexes": {
++        "accounts_user_id_idx": {
++          "name": "accounts_user_id_idx",
++          "columns": [
++            "user_id"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "accounts_user_id_users_id_fk": {
++          "name": "accounts_user_id_users_id_fk",
++          "tableFrom": "accounts",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "sessions": {
++      "name": "sessions",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "expires_at": {
++          "name": "expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "token": {
++          "name": "token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "ip_address": {
++          "name": "ip_address",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "user_agent": {
++          "name": "user_agent",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "sessions_token_unique": {
++          "name": "sessions_token_unique",
++          "columns": [
++            "token"
++          ],
++          "isUnique": true
++        },
++        "sessions_user_id_idx": {
++          "name": "sessions_user_id_idx",
++          "columns": [
++            "user_id"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "sessions_user_id_users_id_fk": {
++          "name": "sessions_user_id_users_id_fk",
++          "tableFrom": "sessions",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "users": {
++      "name": "users",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "name": {
++          "name": "name",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "email": {
++          "name": "email",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "email_verified": {
++          "name": "email_verified",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": false
++        },
++        "image": {
++          "name": "image",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "status": {
++          "name": "status",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'pending'"
++        },
++        "role": {
++          "name": "role",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'user'"
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        }
++      },
++      "indexes": {
++        "users_email_unique": {
++          "name": "users_email_unique",
++          "columns": [
++            "email"
++          ],
++          "isUnique": true
++        }
++      },
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "verifications": {
++      "name": "verifications",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "identifier": {
++          "name": "identifier",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "value": {
++          "name": "value",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "expires_at": {
++          "name": "expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        }
++      },
++      "indexes": {
++        "verifications_identifier_idx": {
++          "name": "verifications_identifier_idx",
++          "columns": [
++            "identifier"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    }
++  },
++  "views": {},
++  "enums": {},
++  "_meta": {
++    "schemas": {},
++    "tables": {},
++    "columns": {}
++  },
++  "internal": {
++    "indexes": {}
++  }
++}
+\ No newline at end of file
+diff --git a/drizzle/meta/_journal.json b/drizzle/meta/_journal.json
+index aa3f5d6..19b57d5 100644
+--- a/drizzle/meta/_journal.json
++++ b/drizzle/meta/_journal.json
+@@ -43,6 +43,13 @@
+       "when": 1792145653403,
+       "tag": "0005_auth",
+       "breakpoints": true
++    },
++    {
++      "idx": 6,
++      "version": "6",
++      "when": 1792147262960,
++      "tag": "0006_per_user",
++      "breakpoints": true
+     }
+   ]
+ }
+\ No newline at end of file
+diff --git a/package.json b/package.json
+index d438476..22ee5b2 100644
+--- a/package.json
++++ b/package.json
+@@ -10,6 +10,7 @@
+     "test": "vitest run",
+     "typecheck": "next typegen && tsc --noEmit",
+     "db:generate": "drizzle-kit generate",
++    "db:claim": "tsx scripts/claim-data.ts",
+     "freq:build": "python scripts/export-wordfreq.py data/wordfreq-en.txt && tsx scripts/build-frequency.ts data/wordfreq-en.txt",
+     "cmudict:build": "tsx scripts/build-cmudict.ts"
+   },
+diff --git a/scripts/claim-data.ts b/scripts/claim-data.ts
+new file mode 100644
+index 0000000..0857b6f
+--- /dev/null
++++ b/scripts/claim-data.ts
+@@ -0,0 +1,22 @@
++import path from 'node:path';
++import { createDb } from '../src/server/db/client';
++import { ClaimError, claimLegacyData } from '../src/server/repo/claim';
++
++// M6-2 이전 데이터를 내 계정으로 옮긴다. 사용법: npm run db:claim -- you@gmail.com
++// 먼저 그 계정으로 로그인해 계정을 만들어 둔다. DB 경로는 앱과 같다(SLAVE_VOCA_DB, 없으면 data/app.db).
++const email = process.argv[2];
++if (!email) {
++  console.error('사용법: npm run db:claim -- <이메일>');
++  process.exit(1);
++}
++const db = createDb(process.env.SLAVE_VOCA_DB ?? path.join(process.cwd(), 'data', 'app.db'));
++try {
++  const r = claimLegacyData(db, email);
++  console.log(`옮겼습니다: 문서 ${r.documents}, 카드 ${r.words}, 아는 단어 ${r.knownWords}, 설정 ${r.settings}`);
++} catch (err) {
++  if (err instanceof ClaimError) {
++    console.error(err.message);
++    process.exit(1);
++  }
++  throw err;
++}
+diff --git a/src/app/(app)/documents/[id]/actions.ts b/src/app/(app)/documents/[id]/actions.ts
+index 4796c85..7df8c94 100644
+--- a/src/app/(app)/documents/[id]/actions.ts
++++ b/src/app/(app)/documents/[id]/actions.ts
+@@ -6,7 +6,7 @@ import { getDb } from "@/server/db/client";
+ import { deleteCard, listFailedMeaningIds, occurrencesBelongTo } from "@/server/repo/cards";
+ import { MISSING_KEY_MESSAGE } from "@/lib/regen-messages";
+ import { defaultMeaningModel, regenerateMeanings } from "@/server/services/enrich";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ const BAD_REQUEST = "잘못된 요청입니다.";
+ 
+@@ -25,13 +25,13 @@ export async function regenerateDocumentMeanings(
+   documentId: unknown,
+   occurrenceIds: unknown,
+ ): Promise<RegenerateActionResult> {
+-  await requireUser();
++  const user = await requireUser();
+   const ids = parseIdList(occurrenceIds);
+   if (!isId(documentId) || ids === null) return { error: BAD_REQUEST };
+   const db = getDb();
+-  if (!occurrencesBelongTo(db, documentId, ids)) return { error: BAD_REQUEST };
+-  const targets = ids.length > 0 ? ids : listFailedMeaningIds(db, documentId);
+-  const result = await regenerateMeanings(db, targets, defaultMeaningModel());
++  if (!occurrencesBelongTo(db, user.id, documentId, ids)) return { error: BAD_REQUEST };
++  const targets = ids.length > 0 ? ids : listFailedMeaningIds(db, user.id, documentId);
++  const result = await regenerateMeanings(db, user.id, targets, defaultMeaningModel());
+   if (result.error === "missing-key") return { error: MISSING_KEY_MESSAGE };
+   refresh(documentId);
+   return result;
+@@ -39,9 +39,9 @@ export async function regenerateDocumentMeanings(
+ 
+ // 카드 삭제: 모든 문서의 용례와 복습 기록이 함께 지워진다.
+ export async function removeCard(documentId: unknown, wordId: unknown): Promise<{ error: string | null }> {
+-  await requireUser();
++  const user = await requireUser();
+   if (!isId(documentId) || !isId(wordId)) return { error: BAD_REQUEST };
+-  if (!deleteCard(getDb(), wordId)) return { error: "카드를 찾을 수 없습니다." };
++  if (!deleteCard(getDb(), user.id, wordId)) return { error: "카드를 찾을 수 없습니다." };
+   refresh(documentId);
+   revalidatePath("/study");
+   return { error: null };
+diff --git a/src/app/(app)/documents/[id]/page.tsx b/src/app/(app)/documents/[id]/page.tsx
+index 79c7f48..62e7a63 100644
+--- a/src/app/(app)/documents/[id]/page.tsx
++++ b/src/app/(app)/documents/[id]/page.tsx
+@@ -8,7 +8,7 @@ import { countOccurrencesByWord, listOccurrencesByDocument } from "@/server/repo
+ import { getDocument } from "@/server/repo/documents";
+ import { RetryAllButton } from "./retry-all-button";
+ import { WordTable } from "./word-table";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ // 문서 단어 목록. 뜻 고치기·다시 시도·카드 삭제는 표(WordTable)에서, 문서 전체 다시 시도는 안내 줄에서 한다.
+ export default function DocumentWordsPage({ params }: PageProps<"/documents/[id]">) {
+@@ -20,15 +20,15 @@ export default function DocumentWordsPage({ params }: PageProps<"/documents/[id]
+ }
+ 
+ async function DocumentWords({ params }: { params: Promise<{ id: string }> }) {
+-  await requireUser();
++  const user = await requireUser();
+   const id = Number((await params).id);
+   if (!Number.isInteger(id)) notFound();
+ 
+   const db = getDb();
+-  const doc = getDocument(db, id);
++  const doc = getDocument(db, user.id, id);
+   if (!doc) notFound();
+-  const rows = listOccurrencesByDocument(db, id);
+-  const usage = countOccurrencesByWord(db, rows.map((r) => r.wordId));
++  const rows = listOccurrencesByDocument(db, user.id, id);
++  const usage = countOccurrencesByWord(db, user.id, rows.map((r) => r.wordId));
+   const failed = rows.filter((r) => r.meaningStatus === "failed").length;
+   const missingKey = !process.env.GEMINI_API_KEY;
+ 
+diff --git a/src/app/(app)/documents/[id]/review/actions.ts b/src/app/(app)/documents/[id]/review/actions.ts
+index de10e85..434d3b9 100644
+--- a/src/app/(app)/documents/[id]/review/actions.ts
++++ b/src/app/(app)/documents/[id]/review/actions.ts
+@@ -6,7 +6,7 @@ import { isId, parseIdList } from "@/lib/validate";
+ import { getDb } from "@/server/db/client";
+ import { ReviewError, saveReviewSelection, type SavedCards } from "@/server/repo/cards";
+ import { defaultEnrichDeps, enrichDocument } from "@/server/services/enrich";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ // 검토 결과를 저장하고, 뜻과 발음을 채운 뒤 문서 단어 목록으로 이동한다.
+ // 인자는 브라우저에서 오므로 형태부터 확인한다. 잘못된 목록이 "아무것도 선택 안 함"으로 읽혀
+@@ -15,19 +15,19 @@ export async function saveReview(
+   documentId: unknown,
+   selectedCandidateIds: unknown,
+ ): Promise<{ error: string }> {
+-  await requireUser();
++  const user = await requireUser();
+   const ids = parseIdList(selectedCandidateIds);
+   if (!isId(documentId) || ids === null) return { error: "잘못된 요청입니다." };
+   const db = getDb();
+   let saved: SavedCards;
+   try {
+-    saved = saveReviewSelection(db, documentId, ids);
++    saved = saveReviewSelection(db, user.id, documentId, ids);
+   } catch (err) {
+     if (err instanceof ReviewError) return { error: err.message };
+     throw err;
+   }
+ 
+-  await enrichDocument(db, documentId, saved, defaultEnrichDeps());
++  await enrichDocument(db, user.id, documentId, saved, defaultEnrichDeps());
+   revalidatePath("/documents");
+   redirect(`/documents/${documentId}`);
+ }
+diff --git a/src/app/(app)/documents/[id]/review/page.tsx b/src/app/(app)/documents/[id]/review/page.tsx
+index 55a2ce4..edf59b4 100644
+--- a/src/app/(app)/documents/[id]/review/page.tsx
++++ b/src/app/(app)/documents/[id]/review/page.tsx
+@@ -5,7 +5,7 @@ import { getDb } from "@/server/db/client";
+ import { listCandidates } from "@/server/repo/candidates";
+ import { getDocument } from "@/server/repo/documents";
+ import { CandidateTable } from "./candidate-table";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export default function ReviewPage({ params }: PageProps<"/documents/[id]/review">) {
+   return (
+@@ -16,14 +16,14 @@ export default function ReviewPage({ params }: PageProps<"/documents/[id]/review
+ }
+ 
+ async function Review({ params }: { params: Promise<{ id: string }> }) {
+-  await requireUser();
++  const user = await requireUser();
+   const id = Number((await params).id);
+   if (!Number.isInteger(id)) notFound();
+ 
+   const db = getDb();
+-  const doc = getDocument(db, id);
++  const doc = getDocument(db, user.id, id);
+   if (!doc) notFound();
+-  const candidates = listCandidates(db, id);
++  const candidates = listCandidates(db, user.id, id);
+ 
+   return (
+     <main className="mx-auto w-full max-w-[1200px] pb-10">
+diff --git a/src/app/(app)/documents/actions.ts b/src/app/(app)/documents/actions.ts
+index f124e91..183b823 100644
+--- a/src/app/(app)/documents/actions.ts
++++ b/src/app/(app)/documents/actions.ts
+@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
+ import { redirect } from "next/navigation";
+ import { getDb } from "@/server/db/client";
+ import { ingestPdf, UploadError, type IngestResult } from "@/server/services/ingest";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export interface UploadState {
+   error: string | null;
+@@ -14,7 +14,7 @@ export async function uploadDocument(
+   _prev: UploadState,
+   formData: FormData,
+ ): Promise<UploadState> {
+-  await requireUser();
++  const user = await requireUser();
+   const file = formData.get("file");
+   if (!(file instanceof File) || file.size === 0) {
+     return { error: "PDF 파일을 선택하세요." };
+@@ -24,7 +24,7 @@ export async function uploadDocument(
+ 
+   let result: IngestResult;
+   try {
+-    result = await ingestPdf(getDb(), {
++    result = await ingestPdf(getDb(), user.id, {
+       fileName: file.name,
+       title,
+       kind,
+diff --git a/src/app/(app)/documents/page.tsx b/src/app/(app)/documents/page.tsx
+index 1a2b454..bd2f816 100644
+--- a/src/app/(app)/documents/page.tsx
++++ b/src/app/(app)/documents/page.tsx
+@@ -7,7 +7,7 @@ import { countFailedMeaningsByDocument, countOccurrencesByDocument } from "@/ser
+ import { countCandidatesByDocument } from "@/server/repo/candidates";
+ import { listDocuments } from "@/server/repo/documents";
+ import { UploadForm } from "./upload-form";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export default function DocumentsPage() {
+   return (
+@@ -22,12 +22,12 @@ export default function DocumentsPage() {
+ }
+ 
+ async function DocumentList() {
+-  await requireUser();
++  const user = await requireUser();
+   const db = getDb();
+-  const docs = listDocuments(db);
+-  const candidateCounts = countCandidatesByDocument(db);
+-  const wordCounts = countOccurrencesByDocument(db);
+-  const failedCounts = countFailedMeaningsByDocument(db);
++  const docs = listDocuments(db, user.id);
++  const candidateCounts = countCandidatesByDocument(db, user.id);
++  const wordCounts = countOccurrencesByDocument(db, user.id);
++  const failedCounts = countFailedMeaningsByDocument(db, user.id);
+ 
+   if (docs.length === 0) return <p className="mt-5 text-muted">아직 올린 문서가 없습니다.</p>;
+ 
+diff --git a/src/app/(app)/layout.tsx b/src/app/(app)/layout.tsx
+index 828c596..5689be5 100644
+--- a/src/app/(app)/layout.tsx
++++ b/src/app/(app)/layout.tsx
+@@ -14,7 +14,7 @@ async function TodayBadge() {
+   const user = await getSessionUser();
+   if (user?.status !== "approved") return null;
+   const db = getDb();
+-  const { review, fresh } = countStudyToday(db, new Date(), getSettings(db).dailyNewLimit);
++  const { review, fresh } = countStudyToday(db, user.id, new Date(), getSettings(db, user.id).dailyNewLimit);
+   const total = review + fresh;
+   if (total === 0) return null;
+   return <span className="text-xs font-semibold text-accent tabular-nums">{total}</span>;
+diff --git a/src/app/(app)/page.tsx b/src/app/(app)/page.tsx
+index 0bd0071..acaf2df 100644
+--- a/src/app/(app)/page.tsx
++++ b/src/app/(app)/page.tsx
+@@ -9,7 +9,7 @@ import { countCandidatesByDocument } from "@/server/repo/candidates";
+ import { listDocuments } from "@/server/repo/documents";
+ import { getSettings } from "@/server/repo/settings";
+ import { countStudyToday } from "@/server/repo/study";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ const RECENT_DOCUMENTS = 5;
+ 
+@@ -25,16 +25,16 @@ export default function Home() {
+ }
+ 
+ async function TodaySummary() {
+-  await requireUser();
++  const user = await requireUser();
+   const db = getDb();
+   const now = new Date();
+-  const settings = getSettings(db);
+-  const { review, fresh } = countStudyToday(db, now, settings.dailyNewLimit);
+-  const docs = listDocuments(db);
++  const settings = getSettings(db, user.id);
++  const { review, fresh } = countStudyToday(db, user.id, now, settings.dailyNewLimit);
++  const docs = listDocuments(db, user.id);
+   const recent = docs.slice(0, RECENT_DOCUMENTS);
+-  const wordCounts = countOccurrencesByDocument(db);
+-  const candidateCounts = countCandidatesByDocument(db);
+-  const failedCounts = countFailedMeaningsByDocument(db);
++  const wordCounts = countOccurrencesByDocument(db, user.id);
++  const candidateCounts = countCandidatesByDocument(db, user.id);
++  const failedCounts = countFailedMeaningsByDocument(db, user.id);
+   const totalFailed = [...failedCounts.values()].reduce((a, b) => a + b, 0);
+   const missingKey = !process.env.GEMINI_API_KEY;
+ 
+diff --git a/src/app/(app)/settings/actions.ts b/src/app/(app)/settings/actions.ts
+index df2376b..172336d 100644
+--- a/src/app/(app)/settings/actions.ts
++++ b/src/app/(app)/settings/actions.ts
+@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
+ import { parseSettingsInput, THEME_COOKIE, type SettingsErrors } from "@/lib/settings";
+ import { getDb } from "@/server/db/client";
+ import { saveSettings } from "@/server/repo/settings";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export type SaveSettingsResult =
+   | { status: "saved" }
+@@ -17,12 +17,12 @@ const ONE_YEAR = 60 * 60 * 24 * 365;
+ // 네 항목을 함께 저장한다. 하나라도 범위 밖이면 아무것도 저장하지 않는다.
+ // 테마는 쿠키에 둔다: 레이아웃의 인라인 스크립트가 첫 화면을 그리기 전에 읽는다(정적 셸을 유지).
+ export async function saveSettingsAction(input: unknown): Promise<SaveSettingsResult> {
+-  await requireUser();
++  const user = await requireUser();
+   const parsed = parseSettingsInput(input);
+   if (parsed === null) return { status: "error", message: "잘못된 요청입니다." };
+   if (!parsed.ok) return { status: "invalid", errors: parsed.errors };
+   const { theme, ...rest } = parsed.value;
+-  saveSettings(getDb(), rest);
++  saveSettings(getDb(), user.id, rest);
+   const jar = await cookies();
+   if (theme === "system") jar.delete(THEME_COOKIE);
+   else jar.set(THEME_COOKIE, theme, { path: "/", maxAge: ONE_YEAR, sameSite: "lax" });
+diff --git a/src/app/(app)/settings/page.tsx b/src/app/(app)/settings/page.tsx
+index ff3b7dd..dbaf2e6 100644
+--- a/src/app/(app)/settings/page.tsx
++++ b/src/app/(app)/settings/page.tsx
+@@ -4,7 +4,7 @@ import { isTheme, THEME_COOKIE } from "@/lib/settings";
+ import { getDb } from "@/server/db/client";
+ import { getSettings } from "@/server/repo/settings";
+ import { SettingsForm } from "./settings-form";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export default function SettingsPage() {
+   return (
+@@ -18,8 +18,8 @@ export default function SettingsPage() {
+ }
+ 
+ async function CurrentSettings() {
+-  await requireUser();
+-  const settings = getSettings(getDb());
++  const user = await requireUser();
++  const settings = getSettings(getDb(), user.id);
+   const stored = (await cookies()).get(THEME_COOKIE)?.value;
+   return <SettingsForm initial={{ ...settings, theme: isTheme(stored) ? stored : "system" }} />;
+ }
+diff --git a/src/app/(app)/study/actions.ts b/src/app/(app)/study/actions.ts
+index 32dff8a..0b4364f 100644
+--- a/src/app/(app)/study/actions.ts
++++ b/src/app/(app)/study/actions.ts
+@@ -6,7 +6,7 @@ import { ANSWERS, type Answer } from "@/lib/srs/scheduler";
+ import { isId } from "@/lib/validate";
+ import { getDb } from "@/server/db/client";
+ import { recordAnswer, StudyError, undoAnswer } from "@/server/repo/study";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export type AnswerResult =
+   | { error: string }
+@@ -15,12 +15,12 @@ export type AnswerResult =
+ // 복습 응답 하나를 저장한다. 성공하면 다음 복습 시각, 응답 뒤 상태의 간격 미리보기,
+ // 되돌리기에 쓸 기록 id를 돌려준다.
+ export async function answerCard(wordId: number, answer: Answer): Promise<AnswerResult> {
+-  await requireUser();
++  const user = await requireUser();
+   if (!Number.isInteger(wordId) || !ANSWERS.includes(answer)) {
+     return { error: "잘못된 요청입니다." };
+   }
+   try {
+-    const { due, intervals, logId } = recordAnswer(getDb(), wordId, answer, new Date());
++    const { due, intervals, logId } = recordAnswer(getDb(), user.id, wordId, answer, new Date());
+     // 상단 메뉴의 "오늘 남은 수" 배지(레이아웃)가 바로 줄도록 다시 그린다.
+     // 복습 화면의 큐 상태는 클라이언트 state라 그대로 유지된다.
+     revalidatePath("/", "layout");
+@@ -35,10 +35,10 @@ export async function answerCard(wordId: number, answer: Answer): Promise<Answer
+ export type UndoResult = { error: null } | { error: string; rejected: boolean };
+ 
+ export async function undoLastAnswer(logId: unknown): Promise<UndoResult> {
+-  await requireUser();
++  const user = await requireUser();
+   if (!isId(logId)) return { error: "잘못된 요청입니다.", rejected: true };
+   try {
+-    undoAnswer(getDb(), logId);
++    undoAnswer(getDb(), user.id, logId);
+     revalidatePath("/", "layout");
+     return { error: null };
+   } catch (err) {
+diff --git a/src/app/(app)/study/page.tsx b/src/app/(app)/study/page.tsx
+index d0f8271..84efc56 100644
+--- a/src/app/(app)/study/page.tsx
++++ b/src/app/(app)/study/page.tsx
+@@ -3,7 +3,7 @@ import { getDb } from "@/server/db/client";
+ import { getSettings } from "@/server/repo/settings";
+ import { getStudyQueue } from "@/server/repo/study";
+ import { StudySession } from "./study-session";
+-import { requireUser } from "@/server/auth/current-user";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export default function StudyPage() {
+   return (
+@@ -17,9 +17,9 @@ export default function StudyPage() {
+ }
+ 
+ async function TodayQueue() {
+-  await requireUser();
++  const user = await requireUser();
+   const db = getDb();
+-  const settings = getSettings(db);
+-  const cards = getStudyQueue(db, new Date(), settings.dailyNewLimit);
++  const settings = getSettings(db, user.id);
++  const cards = getStudyQueue(db, user.id, new Date(), settings.dailyNewLimit);
+   return <StudySession cards={cards} autoSpeak={settings.autoSpeak} />;
+ }
+diff --git a/src/app/api/usage-meaning/route.ts b/src/app/api/usage-meaning/route.ts
+index e90c516..e26934a 100644
+--- a/src/app/api/usage-meaning/route.ts
++++ b/src/app/api/usage-meaning/route.ts
+@@ -1,6 +1,6 @@
+ import { revalidatePath } from "next/cache";
+ import { isId, isJsonContentType } from "@/lib/validate";
+-import { getSessionUser } from "@/server/auth/current-user";
++import { getSessionUser } from "@/server/auth/current-user";
+ import { getDb } from "@/server/db/client";
+ import { defaultMeaningModel } from "@/server/services/enrich";
+ import { regenerateUsageMeaning } from "@/server/services/usage-meaning";
+@@ -8,9 +8,9 @@ import { regenerateUsageMeaning } from "@/server/services/usage-meaning";
+ // 복습 카드 뒷면의 "뜻 다시 만들기". Server Action이 아닌 Route Handler인 이유: 한 클라이언트의 Server Action은
+ // 차례로 실행되어, 뜻을 만드는 몇 초 동안 1·2·3 응답 저장이 줄을 서 버린다. fetch는 그 줄에 들어가지 않는다.
+ export async function POST(request: Request) {
+-  // 화면처럼 보내 버릴 수 없으므로 승인된 사용자가 아니면 401로 답한다.
+-  const user = await getSessionUser();
+-  if (user?.status !== "approved") return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
++  // 화면처럼 보내 버릴 수 없으므로 승인된 사용자가 아니면 401로 답한다.
++  const user = await getSessionUser();
++  if (user?.status !== "approved") return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
+   // 다른 사이트가 보낸 요청을 거르려고 Content-Type이 정확히 application/json인 것만 받는다(그 형식의 교차 출처
+   // 요청은 브라우저가 사전 확인(preflight)을 거치고, 이 앱은 CORS를 열지 않는다).
+   if (!isJsonContentType(request.headers.get("content-type"))) {
+@@ -25,7 +25,7 @@ export async function POST(request: Request) {
+   const occurrenceId = typeof body === "object" && body !== null ? (body as { occurrenceId?: unknown }).occurrenceId : undefined;
+   // DB를 열기 전에 형태부터 거른다.
+   if (!isId(occurrenceId)) return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
+-  const result = await regenerateUsageMeaning(getDb(), occurrenceId, defaultMeaningModel());
++  const result = await regenerateUsageMeaning(getDb(), user.id, occurrenceId, defaultMeaningModel());
+   if (result.error === null) revalidatePath("/documents", "layout"); // 문서 단어 목록에도 새 뜻이 보이게 한다
+   return Response.json(result);
+ }
+diff --git a/src/server/db/client.ts b/src/server/db/client.ts
+index 8c016dd..9e1dedd 100644
+--- a/src/server/db/client.ts
++++ b/src/server/db/client.ts
+@@ -13,9 +13,14 @@ const MIGRATIONS_FOLDER = path.join(process.cwd(), 'drizzle');
+ export function createDb(file: string): Db {
+   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
+   const sqlite = new Database(file);
+-  sqlite.pragma('foreign_keys = ON');
+   const db = drizzle({ client: sqlite, schema });
++  // 마이그레이션은 외래 키를 끈 채 돌린다. 마이그레이션은 한 트랜잭션이라 그 안의 PRAGMA foreign_keys=OFF는
++  // 효과가 없고, 켜진 채 표를 새로 만들면(0006) DROP TABLE이 연결된 행까지 지운다. 끝난 뒤 깨진 연결이 없는지 본다.
++  sqlite.pragma('foreign_keys = OFF');
+   migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
++  const broken = sqlite.pragma('foreign_key_check') as unknown[];
++  if (broken.length > 0) throw new Error(`마이그레이션 뒤 외래 키가 깨졌습니다: ${JSON.stringify(broken.slice(0, 5))}`);
++  sqlite.pragma('foreign_keys = ON');
+   return db;
+ }
+ 
+diff --git a/src/server/db/schema.ts b/src/server/db/schema.ts
+index 5b5fcec..0d1bd6c 100644
+--- a/src/server/db/schema.ts
++++ b/src/server/db/schema.ts
+@@ -1,102 +1,152 @@
+-import { sql } from 'drizzle-orm';
+-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
++import { sql } from "drizzle-orm";
++import {
++  index,
++  integer,
++  primaryKey,
++  real,
++  sqliteTable,
++  text,
++  uniqueIndex,
++} from "drizzle-orm/sqlite-core";
++import { users } from "./auth-schema";
+ 
+-export const DOCUMENT_KINDS = ['paper', 'presentation'] as const;
++export const DOCUMENT_KINDS = ["paper", "presentation"] as const;
+ export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+ 
+-export const DOCUMENT_STATUSES = ['extracting', 'reviewing', 'processing', 'done', 'error'] as const;
++export const DOCUMENT_STATUSES = [
++  "extracting",
++  "reviewing",
++  "processing",
++  "done",
++  "error",
++] as const;
+ export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
+ 
++// 데이터의 주인(M6-2). 사용자를 지우면 그 사람의 데이터도 함께 지워진다.
++const owner = () =>
++  text("user_id")
++    .notNull()
++    .references(() => users.id, { onDelete: "cascade" });
++
+ const createdAt = () =>
+-  integer('created_at', { mode: 'timestamp_ms' })
++  integer("created_at", { mode: "timestamp_ms" })
+     .notNull()
+     .$defaultFn(() => new Date());
+ 
+-export const documents = sqliteTable('documents', {
+-  id: integer('id').primaryKey({ autoIncrement: true }),
+-  title: text('title').notNull(),
+-  kind: text('kind', { enum: DOCUMENT_KINDS }).notNull(),
+-  status: text('status', { enum: DOCUMENT_STATUSES }).notNull().default('extracting'),
+-  errorMessage: text('error_message'),
+-  createdAt: createdAt(),
+-});
++export const documents = sqliteTable(
++  "documents",
++  {
++    id: integer("id").primaryKey({ autoIncrement: true }),
++    userId: owner(),
++    title: text("title").notNull(),
++    kind: text("kind", { enum: DOCUMENT_KINDS }).notNull(),
++    status: text("status", { enum: DOCUMENT_STATUSES })
++      .notNull()
++      .default("extracting"),
++    errorMessage: text("error_message"),
++    createdAt: createdAt(),
++  },
++  (t) => [index("documents_user_id_idx").on(t.userId)],
++);
+ 
+-export const candidates = sqliteTable('candidates', {
+-  id: integer('id').primaryKey({ autoIncrement: true }),
+-  documentId: integer('document_id')
++export const candidates = sqliteTable("candidates", {
++  id: integer("id").primaryKey({ autoIncrement: true }),
++  documentId: integer("document_id")
++    .notNull()
++    .references(() => documents.id, { onDelete: "cascade" }),
++  lemma: text("lemma").notNull(),
++  surface: text("surface").notNull(),
++  sentence: text("sentence").notNull(),
++  count: integer("count").notNull(),
++  isExisting: integer("is_existing", { mode: "boolean" }).notNull(),
++  inDictionary: integer("in_dictionary", { mode: "boolean" })
+     .notNull()
+-    .references(() => documents.id, { onDelete: 'cascade' }),
+-  lemma: text('lemma').notNull(),
+-  surface: text('surface').notNull(),
+-  sentence: text('sentence').notNull(),
+-  count: integer('count').notNull(),
+-  isExisting: integer('is_existing', { mode: 'boolean' }).notNull(),
+-  inDictionary: integer('in_dictionary', { mode: 'boolean' }).notNull().default(true),
++    .default(true),
+ });
+ 
+ // 카드. FSRS 컬럼 기본값은 "아직 한 번도 보지 않은 새 카드"(state 0 = New)다.
+-export const words = sqliteTable('words', {
+-  id: integer('id').primaryKey({ autoIncrement: true }),
+-  lemma: text('lemma').notNull().unique(),
+-  phonetic: text('phonetic'),
+-  createdAt: createdAt(),
+-  due: integer('due', { mode: 'timestamp_ms' }).notNull().default(sql`0`),
+-  stability: real('stability').notNull().default(0),
+-  difficulty: real('difficulty').notNull().default(0),
+-  elapsedDays: integer('elapsed_days').notNull().default(0),
+-  scheduledDays: integer('scheduled_days').notNull().default(0),
+-  learningSteps: integer('learning_steps').notNull().default(0),
+-  reps: integer('reps').notNull().default(0),
+-  lapses: integer('lapses').notNull().default(0),
+-  state: integer('state').notNull().default(0),
+-  lastReview: integer('last_review', { mode: 'timestamp_ms' }),
+-  // 새 카드를 처음 응답한 시각. 하루 새 카드 상한을 셀 때 쓴다.
+-  introducedAt: integer('introduced_at', { mode: 'timestamp_ms' }),
+-});
++// 같은 단어도 사용자마다 따로 카드다: (user_id, lemma)가 고유하다.
++export const words = sqliteTable(
++  "words",
++  {
++    id: integer("id").primaryKey({ autoIncrement: true }),
++    userId: owner(),
++    lemma: text("lemma").notNull(),
++    phonetic: text("phonetic"),
++    createdAt: createdAt(),
++    due: integer("due", { mode: "timestamp_ms" })
++      .notNull()
++      .default(sql`0`),
++    stability: real("stability").notNull().default(0),
++    difficulty: real("difficulty").notNull().default(0),
++    elapsedDays: integer("elapsed_days").notNull().default(0),
++    scheduledDays: integer("scheduled_days").notNull().default(0),
++    learningSteps: integer("learning_steps").notNull().default(0),
++    reps: integer("reps").notNull().default(0),
++    lapses: integer("lapses").notNull().default(0),
++    state: integer("state").notNull().default(0),
++    lastReview: integer("last_review", { mode: "timestamp_ms" }),
++    // 새 카드를 처음 응답한 시각. 하루 새 카드 상한을 셀 때 쓴다.
++    introducedAt: integer("introduced_at", { mode: "timestamp_ms" }),
++  },
++  (t) => [uniqueIndex("words_user_id_lemma_unique").on(t.userId, t.lemma)],
++);
+ 
+-export const MEANING_STATUSES = ['pending', 'done', 'failed'] as const;
++export const MEANING_STATUSES = ["pending", "done", "failed"] as const;
+ export type MeaningStatus = (typeof MEANING_STATUSES)[number];
+ 
+ // 용례. 같은 단어도 문서마다 문맥 뜻이 다를 수 있어 뜻은 여기에 둔다.
+-export const occurrences = sqliteTable('occurrences', {
+-  id: integer('id').primaryKey({ autoIncrement: true }),
+-  wordId: integer('word_id')
++export const occurrences = sqliteTable("occurrences", {
++  id: integer("id").primaryKey({ autoIncrement: true }),
++  wordId: integer("word_id")
++    .notNull()
++    .references(() => words.id, { onDelete: "cascade" }),
++  documentId: integer("document_id")
+     .notNull()
+-    .references(() => words.id, { onDelete: 'cascade' }),
+-  documentId: integer('document_id')
++    .references(() => documents.id, { onDelete: "cascade" }),
++  surface: text("surface").notNull(),
++  sentence: text("sentence").notNull(),
++  meaningKo: text("meaning_ko"),
++  meaningStatus: text("meaning_status", { enum: MEANING_STATUSES })
+     .notNull()
+-    .references(() => documents.id, { onDelete: 'cascade' }),
+-  surface: text('surface').notNull(),
+-  sentence: text('sentence').notNull(),
+-  meaningKo: text('meaning_ko'),
+-  meaningStatus: text('meaning_status', { enum: MEANING_STATUSES }).notNull().default('pending'),
++    .default("pending"),
+   createdAt: createdAt(),
+ });
+ 
+ // 복습 기록. rating은 ts-fsrs Rating 값(1 Again, 2 Hard, 3 Good).
+-export const reviewLogs = sqliteTable('review_logs', {
+-  id: integer('id').primaryKey({ autoIncrement: true }),
+-  wordId: integer('word_id')
++export const reviewLogs = sqliteTable("review_logs", {
++  id: integer("id").primaryKey({ autoIncrement: true }),
++  wordId: integer("word_id")
+     .notNull()
+-    .references(() => words.id, { onDelete: 'cascade' }),
+-  rating: integer('rating').notNull(),
+-  reviewedAt: integer('reviewed_at', { mode: 'timestamp_ms' }).notNull(),
++    .references(() => words.id, { onDelete: "cascade" }),
++  rating: integer("rating").notNull(),
++  reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }).notNull(),
+   // 응답 전 카드의 일정 상태(JSON). 직전 응답 되돌리기에 쓴다. 이 열이 생기기 전 기록은 null.
+-  prevCard: text('prev_card'),
++  prevCard: text("prev_card"),
+ });
+ 
+-export const knownWords = sqliteTable('known_words', {
+-  lemma: text('lemma').primaryKey(),
+-  createdAt: createdAt(),
+-});
++export const knownWords = sqliteTable(
++  "known_words",
++  {
++    userId: owner(),
++    lemma: text("lemma").notNull(),
++    createdAt: createdAt(),
++  },
++  (t) => [primaryKey({ columns: [t.userId, t.lemma] })],
++);
+ 
+-export const settings = sqliteTable('settings', {
+-  key: text('key').primaryKey(),
+-  value: text('value').notNull(),
+-});
++export const settings = sqliteTable(
++  "settings",
++  {
++    userId: owner(),
++    key: text("key").notNull(),
++    value: text("value").notNull(),
++  },
++  (t) => [primaryKey({ columns: [t.userId, t.key] })],
++);
+ 
+ export type DocumentRow = typeof documents.$inferSelect;
+ export type CandidateRow = typeof candidates.$inferSelect;
+ export type WordRow = typeof words.$inferSelect;
+ 
+-export * from './auth-schema';
++export * from "./auth-schema";
+diff --git a/src/server/repo/candidates.ts b/src/server/repo/candidates.ts
+index e3fce57..f23daa4 100644
+--- a/src/server/repo/candidates.ts
++++ b/src/server/repo/candidates.ts
+@@ -1,11 +1,12 @@
+-import { asc, count, desc, eq } from 'drizzle-orm';
++import { and, asc, count, desc, eq, getTableColumns } from 'drizzle-orm';
+ import type { Candidate } from '@/lib/extract/extract';
+ import type { Db } from '../db/client';
+-import { candidates, type CandidateRow } from '../db/schema';
++import { candidates, documents, type CandidateRow } from '../db/schema';
+ 
+ // 한 행에 변수 7개라 SQLite 상한(32766) 안에 들도록 나눠 넣는다.
+ const INSERT_CHUNK = 1000;
+ 
++// 내부용: 방금 만든(주인을 확인한) 문서의 후보를 바꾼다.
+ export function replaceCandidates(db: Db, documentId: number, list: Candidate[]): void {
+   db.transaction((tx) => {
+     tx.delete(candidates).where(eq(candidates.documentId, documentId)).run();
+@@ -17,19 +18,22 @@ export function replaceCandidates(db: Db, documentId: number, list: Candidate[])
+   });
+ }
+ 
+-export function listCandidates(db: Db, documentId: number): CandidateRow[] {
++export function listCandidates(db: Db, userId: string, documentId: number): CandidateRow[] {
+   return db
+-    .select()
++    .select(getTableColumns(candidates))
+     .from(candidates)
+-    .where(eq(candidates.documentId, documentId))
++    .innerJoin(documents, eq(documents.id, candidates.documentId))
++    .where(and(eq(candidates.documentId, documentId), eq(documents.userId, userId)))
+     .orderBy(desc(candidates.count), asc(candidates.lemma))
+     .all();
+ }
+ 
+-export function countCandidatesByDocument(db: Db): Map<number, number> {
++export function countCandidatesByDocument(db: Db, userId: string): Map<number, number> {
+   const rows = db
+     .select({ documentId: candidates.documentId, total: count() })
+     .from(candidates)
++    .innerJoin(documents, eq(documents.id, candidates.documentId))
++    .where(eq(documents.userId, userId))
+     .groupBy(candidates.documentId)
+     .all();
+   return new Map(rows.map((r) => [r.documentId, r.total]));
+diff --git a/src/server/repo/cards.ts b/src/server/repo/cards.ts
+index 4de4737..cb18250 100644
+--- a/src/server/repo/cards.ts
++++ b/src/server/repo/cards.ts
+@@ -21,15 +21,20 @@ export interface SavedCards {
+   wordIds: number[];
+ }
+ 
+-// 검토 결과 저장: 선택 → 카드(words)+용례(occurrences), 선택 해제 → 아는 단어.
++// 검토 결과 저장: 선택 → 카드(words)+용례(occurrences), 선택 해제 → 아는 단어. 모두 그 사용자의 것이다.
+ // 이미 카드인 단어를 해제하면 이번 용례만 건너뛰고 아는 단어로 넣지 않는다.
+ export function saveReviewSelection(
+   db: Db,
++  userId: string,
+   documentId: number,
+   selectedCandidateIds: readonly number[],
+ ): SavedCards {
+   return db.transaction((tx) => {
+-    const doc = tx.select().from(documents).where(eq(documents.id, documentId)).get();
++    const doc = tx
++      .select()
++      .from(documents)
++      .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
++      .get();
+     if (!doc) throw new ReviewError('문서를 찾을 수 없습니다.');
+     if (doc.status !== 'reviewing') throw new ReviewError('이미 저장한 문서입니다.');
+ 
+@@ -39,16 +44,22 @@ export function saveReviewSelection(
+ 
+     for (const c of list) {
+       // candidates.isExisting은 추출 시점 값이라, 그 뒤 다른 문서에서 카드가 됐을 수 있다. 지금의 words를 본다.
+-      const existing = tx.select().from(words).where(eq(words.lemma, c.lemma)).get();
++      const existing = tx
++        .select()
++        .from(words)
++        .where(and(eq(words.userId, userId), eq(words.lemma, c.lemma)))
++        .get();
+       if (!selected.has(c.id)) {
+         if (!existing) {
+-          tx.insert(knownWords).values({ lemma: c.lemma }).onConflictDoNothing().run();
++          tx.insert(knownWords).values({ userId, lemma: c.lemma }).onConflictDoNothing().run();
+         }
+         continue;
+       }
+       // 선택이 이긴다: 다른 문서에서 아는 단어로 등록했더라도 이번에 고르면 카드로 만든다.
+-      tx.delete(knownWords).where(eq(knownWords.lemma, c.lemma)).run();
+-      const word = existing ?? tx.insert(words).values({ lemma: c.lemma }).returning().get();
++      tx.delete(knownWords)
++        .where(and(eq(knownWords.userId, userId), eq(knownWords.lemma, c.lemma)))
++        .run();
++      const word = existing ?? tx.insert(words).values({ userId, lemma: c.lemma }).returning().get();
+       const occurrence = tx
+         .insert(occurrences)
+         .values({ wordId: word.id, documentId, surface: c.surface, sentence: c.sentence })
+@@ -74,7 +85,8 @@ export interface MeaningRequestRow {
+   meaningStatus: MeaningStatus;
+ }
+ 
+-export function listMeaningRequests(db: Db, occurrenceIds: readonly number[]): MeaningRequestRow[] {
++// 뜻을 만들 용례. 브라우저에서 온 id가 섞여 있을 수 있으므로 그 사용자의 단어인 것만 돌려준다.
++export function listMeaningRequests(db: Db, userId: string, occurrenceIds: readonly number[]): MeaningRequestRow[] {
+   if (occurrenceIds.length === 0) return [];
+   return db
+     .select({
+@@ -85,11 +97,13 @@ export function listMeaningRequests(db: Db, occurrenceIds: readonly number[]): M
+     })
+     .from(occurrences)
+     .innerJoin(words, eq(words.id, occurrences.wordId))
+-    .where(inArray(occurrences.id, [...occurrenceIds]))
++    .where(and(inArray(occurrences.id, [...occurrenceIds]), eq(words.userId, userId)))
+     .orderBy(asc(occurrences.id))
+     .all();
+ }
+ 
++// 아래 setMeanings·mark*·listWordsMissingPhonetic·setPhonetic은 내부용이다. 주인을 이미 확인한
++// id(listMeaningRequests의 결과, 저장 흐름의 SavedCards)만 받는다.
+ export function setMeanings(db: Db, results: { id: number; meaningKo: string }[]): void {
+   db.transaction((tx) => {
+     for (const r of results) {
+@@ -156,7 +170,7 @@ export interface OccurrenceView {
+   meaningStatus: MeaningStatus;
+ }
+ 
+-export function listOccurrencesByDocument(db: Db, documentId: number): OccurrenceView[] {
++export function listOccurrencesByDocument(db: Db, userId: string, documentId: number): OccurrenceView[] {
+   return db
+     .select({
+       id: occurrences.id,
+@@ -170,26 +184,29 @@ export function listOccurrencesByDocument(db: Db, documentId: number): Occurrenc
+     })
+     .from(occurrences)
+     .innerJoin(words, eq(words.id, occurrences.wordId))
+-    .where(eq(occurrences.documentId, documentId))
++    .where(and(eq(occurrences.documentId, documentId), eq(words.userId, userId)))
+     .orderBy(asc(words.lemma))
+     .all();
+ }
+ 
+-export function countOccurrencesByDocument(db: Db): Map<number, number> {
++export function countOccurrencesByDocument(db: Db, userId: string): Map<number, number> {
+   const rows = db
+     .select({ documentId: occurrences.documentId, total: count() })
+     .from(occurrences)
++    .innerJoin(documents, eq(documents.id, occurrences.documentId))
++    .where(eq(documents.userId, userId))
+     .groupBy(occurrences.documentId)
+     .all();
+   return new Map(rows.map((r) => [r.documentId, r.total]));
+ }
+ 
+ // 문서별 뜻 생성 실패 수. 홈·문서 목록에서 안내할 때 쓴다.
+-export function countFailedMeaningsByDocument(db: Db): Map<number, number> {
++export function countFailedMeaningsByDocument(db: Db, userId: string): Map<number, number> {
+   const rows = db
+     .select({ documentId: occurrences.documentId, total: count() })
+     .from(occurrences)
+-    .where(eq(occurrences.meaningStatus, 'failed'))
++    .innerJoin(documents, eq(documents.id, occurrences.documentId))
++    .where(and(eq(occurrences.meaningStatus, 'failed'), eq(documents.userId, userId)))
+     .groupBy(occurrences.documentId)
+     .all();
+   return new Map(rows.map((r) => [r.documentId, r.total]));
+@@ -198,28 +215,49 @@ export function countFailedMeaningsByDocument(db: Db): Map<number, number> {
+ // 용례 하나의 지금 뜻과 상태. 복습 카드에서 다시 만든 뒤 새 뜻을 돌려줄 때 쓴다.
+ export function getOccurrenceMeaning(
+   db: Db,
++  userId: string,
+   occurrenceId: number,
+ ): { meaningKo: string | null; meaningStatus: MeaningStatus } | undefined {
+   return db
+     .select({ meaningKo: occurrences.meaningKo, meaningStatus: occurrences.meaningStatus })
+     .from(occurrences)
+-    .where(eq(occurrences.id, occurrenceId))
++    .innerJoin(words, eq(words.id, occurrences.wordId))
++    .where(and(eq(occurrences.id, occurrenceId), eq(words.userId, userId)))
+     .get();
+ }
+ 
+ // 문서에서 뜻 생성에 실패한 용례. "모두 다시 시도"가 쓴다.
+-export function listFailedMeaningIds(db: Db, documentId: number): number[] {
++export function listFailedMeaningIds(db: Db, userId: string, documentId: number): number[] {
+   return db
+     .select({ id: occurrences.id })
+     .from(occurrences)
+-    .where(and(eq(occurrences.documentId, documentId), eq(occurrences.meaningStatus, 'failed')))
++    .innerJoin(documents, eq(documents.id, occurrences.documentId))
++    .where(
++      and(
++        eq(occurrences.documentId, documentId),
++        eq(documents.userId, userId),
++        eq(occurrences.meaningStatus, 'failed'),
++      ),
++    )
+     .orderBy(asc(occurrences.id))
+     .all()
+     .map((r) => r.id);
+ }
+ 
+-// 용례가 문서 안에 있는지. 다른 문서의 용례 id로 고치거나 다시 시도하지 못하게 막는다.
+-export function occurrencesBelongTo(db: Db, documentId: number, occurrenceIds: readonly number[]): boolean {
++// 문서가 그 사용자의 것이고 용례가 모두 그 문서 안에 있는지. 다른 문서·다른 사람의 용례 id로 다시 시도하지
++// 못하게 막는다. 용례 목록이 비면 문서의 주인만 본다("모두 다시 시도").
++export function occurrencesBelongTo(
++  db: Db,
++  userId: string,
++  documentId: number,
++  occurrenceIds: readonly number[],
++): boolean {
++  const owned = db
++    .select({ id: documents.id })
++    .from(documents)
++    .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
++    .get();
++  if (!owned) return false;
+   if (occurrenceIds.length === 0) return true;
+   const found = db
+     .select({ id: occurrences.id })
+@@ -230,20 +268,25 @@ export function occurrencesBelongTo(db: Db, documentId: number, occurrenceIds: r
+ }
+ 
+ // 카드별 용례 수(모든 문서). 카드 삭제 확인 문구에 쓴다.
+-export function countOccurrencesByWord(db: Db, wordIds: readonly number[]): Map<number, number> {
++export function countOccurrencesByWord(db: Db, userId: string, wordIds: readonly number[]): Map<number, number> {
+   if (wordIds.length === 0) return new Map();
+   const rows = db
+     .select({ wordId: occurrences.wordId, total: count() })
+     .from(occurrences)
+-    .where(inArray(occurrences.wordId, [...new Set(wordIds)]))
++    .innerJoin(words, eq(words.id, occurrences.wordId))
++    .where(and(inArray(occurrences.wordId, [...new Set(wordIds)]), eq(words.userId, userId)))
+     .groupBy(occurrences.wordId)
+     .all();
+   return new Map(rows.map((r) => [r.wordId, r.total]));
+ }
+ 
+ // 카드 삭제: 카드(words)를 지우면 외래 키(ON DELETE CASCADE)로 모든 문서의 용례와 복습 기록이 함께 지워진다.
+-// 삭제한 단어는 아는 단어(known_words)에 넣지 않는다(스펙 7장). 카드가 없으면 false.
+-export function deleteCard(db: Db, wordId: number): boolean {
+-  const row = db.delete(words).where(eq(words.id, wordId)).returning({ id: words.id }).get();
++// 삭제한 단어는 아는 단어(known_words)에 넣지 않는다(스펙 7장). 카드가 없거나 남의 카드면 false.
++export function deleteCard(db: Db, userId: string, wordId: number): boolean {
++  const row = db
++    .delete(words)
++    .where(and(eq(words.id, wordId), eq(words.userId, userId)))
++    .returning({ id: words.id })
++    .get();
+   return row !== undefined;
+ }
+diff --git a/src/server/repo/claim.ts b/src/server/repo/claim.ts
+new file mode 100644
+index 0000000..4efb30d
+--- /dev/null
++++ b/src/server/repo/claim.ts
+@@ -0,0 +1,50 @@
++import { and, count, eq } from 'drizzle-orm';
++import type { Db } from '../db/client';
++import { documents, knownWords, settings, users, words } from '../db/schema';
++
++// M6-2 마이그레이션이 기존 데이터를 묶어 둔 임시 소유자(0006_per_user.sql).
++export const LEGACY_OWNER = 'legacy-owner';
++
++export class ClaimError extends Error {
++  constructor(message: string) {
++    super(message);
++    this.name = 'ClaimError';
++  }
++}
++
++export interface ClaimResult {
++  documents: number;
++  words: number;
++  knownWords: number;
++  settings: number;
++}
++
++// 임시 소유자의 데이터를 그 이메일의 계정으로 옮기고 임시 소유자를 지운다. 계정은 먼저 로그인해서 만들어 둬야 하고,
++// 같은 단어 카드가 겹치지 않도록 아직 데이터가 없어야 한다. 한 트랜잭션이라 실패하면 아무것도 바뀌지 않는다.
++export function claimLegacyData(db: Db, email: string): ClaimResult {
++  return db.transaction((tx) => {
++    const legacy = tx.select({ id: users.id }).from(users).where(eq(users.id, LEGACY_OWNER)).get();
++    if (!legacy) throw new ClaimError('넘길 이전 데이터가 없습니다.');
++    const target = tx
++      .select({ id: users.id })
++      .from(users)
++      .where(eq(users.email, email.trim().toLowerCase()))
++      .get();
++    if (!target) throw new ClaimError(`${email} 계정이 없습니다. 먼저 그 계정으로 로그인하세요.`);
++    const owned = (table: typeof documents | typeof words | typeof knownWords | typeof settings) =>
++      tx.select({ n: count() }).from(table).where(eq(table.userId, target.id)).get()?.n ?? 0;
++    if (owned(documents) + owned(words) + owned(knownWords) + owned(settings) > 0) {
++      throw new ClaimError(`${email} 계정에 이미 데이터가 있어 합칠 수 없습니다.`);
++    }
++    const move = (table: typeof documents | typeof words | typeof knownWords | typeof settings) =>
++      tx.update(table).set({ userId: target.id }).where(eq(table.userId, LEGACY_OWNER)).run().changes;
++    const result = {
++      documents: move(documents),
++      words: move(words),
++      knownWords: move(knownWords),
++      settings: move(settings),
++    };
++    tx.delete(users).where(and(eq(users.id, LEGACY_OWNER))).run();
++    return result;
++  });
++}
+diff --git a/src/server/repo/documents.ts b/src/server/repo/documents.ts
+index 4ed49e5..c8597a1 100644
+--- a/src/server/repo/documents.ts
++++ b/src/server/repo/documents.ts
+@@ -1,4 +1,4 @@
+-import { desc, eq } from 'drizzle-orm';
++import { and, desc, eq } from 'drizzle-orm';
+ import type { Db } from '../db/client';
+ import {
+   documents,
+@@ -7,10 +7,12 @@ import {
+   type DocumentStatus,
+ } from '../db/schema';
+ 
+-export function createDocument(db: Db, input: { title: string; kind: DocumentKind }): DocumentRow {
+-  return db.insert(documents).values(input).returning().get();
++// 문서는 올린 사람의 것이다. id로 찾는 함수는 모두 사용자를 함께 받아, 남의 문서는 "없음"으로 본다(M6-2).
++export function createDocument(db: Db, userId: string, input: { title: string; kind: DocumentKind }): DocumentRow {
++  return db.insert(documents).values({ ...input, userId }).returning().get();
+ }
+ 
++// 내부용: 주인을 이미 확인한 문서(올리기·저장 흐름 안)의 상태를 바꾼다.
+ export function updateDocumentStatus(
+   db: Db,
+   id: number,
+@@ -20,10 +22,19 @@ export function updateDocumentStatus(
+   db.update(documents).set({ status, errorMessage }).where(eq(documents.id, id)).run();
+ }
+ 
+-export function getDocument(db: Db, id: number): DocumentRow | undefined {
+-  return db.select().from(documents).where(eq(documents.id, id)).get();
++export function getDocument(db: Db, userId: string, id: number): DocumentRow | undefined {
++  return db
++    .select()
++    .from(documents)
++    .where(and(eq(documents.id, id), eq(documents.userId, userId)))
++    .get();
+ }
+ 
+-export function listDocuments(db: Db): DocumentRow[] {
+-  return db.select().from(documents).orderBy(desc(documents.createdAt), desc(documents.id)).all();
++export function listDocuments(db: Db, userId: string): DocumentRow[] {
++  return db
++    .select()
++    .from(documents)
++    .where(eq(documents.userId, userId))
++    .orderBy(desc(documents.createdAt), desc(documents.id))
++    .all();
+ }
+diff --git a/src/server/repo/settings.ts b/src/server/repo/settings.ts
+index 0894371..0eed451 100644
+--- a/src/server/repo/settings.ts
++++ b/src/server/repo/settings.ts
+@@ -1,8 +1,9 @@
+ import { DAILY_NEW_LIMIT_RANGE, EXCLUDE_TOP_N_RANGE } from '@/lib/settings';
++import { eq } from 'drizzle-orm';
+ import type { Db } from '../db/client';
+ import { settings } from '../db/schema';
+ 
+-// DB에 두는 설정. 화면 테마는 첫 화면이 번쩍이지 않도록 쿠키에 둔다(설정 화면 Action이 함께 저장).
++// DB에 두는 사용자별 설정. 화면 테마는 첫 화면이 번쩍이지 않도록 쿠키에 둔다(설정 화면 Action이 함께 저장).
+ export interface Settings {
+   excludeTopN: number;
+   dailyNewLimit: number;
+@@ -18,8 +19,10 @@ const KEYS: Record<keyof Settings, string> = {
+ };
+ 
+ // 없거나 범위 밖인 값은 처음 값으로 읽는다.
+-export function getSettings(db: Db): Settings {
+-  const stored = new Map(db.select().from(settings).all().map((r) => [r.key, r.value]));
++export function getSettings(db: Db, userId: string): Settings {
++  const stored = new Map(
++    db.select().from(settings).where(eq(settings.userId, userId)).all().map((r) => [r.key, r.value]),
++  );
+   const readInt = (key: 'excludeTopN' | 'dailyNewLimit', range: { min: number; max: number }) => {
+     const raw = stored.get(KEYS[key]);
+     // 숫자만 받는다. Number('')는 0이라, 빈 값이 하루 새 카드 0으로 읽히지 않게 한다.
+@@ -35,11 +38,14 @@ export function getSettings(db: Db): Settings {
+ }
+ 
+ // 검사를 마친 값만 받는다(lib/settings의 parseSettingsInput). 한 트랜잭션에서 모두 쓴다.
+-export function saveSettings(db: Db, value: Settings): void {
++export function saveSettings(db: Db, userId: string, value: Settings): void {
+   db.transaction((tx) => {
+     for (const key of Object.keys(KEYS) as (keyof Settings)[]) {
+-      const row = { key: KEYS[key], value: String(value[key]) };
+-      tx.insert(settings).values(row).onConflictDoUpdate({ target: settings.key, set: { value: row.value } }).run();
++      const row = { userId, key: KEYS[key], value: String(value[key]) };
++      tx.insert(settings)
++        .values(row)
++        .onConflictDoUpdate({ target: [settings.userId, settings.key], set: { value: row.value } })
++        .run();
+     }
+   });
+ }
+diff --git a/src/server/repo/study.ts b/src/server/repo/study.ts
+index 9c36641..9ed3ba8 100644
+--- a/src/server/repo/study.ts
++++ b/src/server/repo/study.ts
+@@ -1,4 +1,4 @@
+-import { and, asc, count, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
++import { and, asc, count, desc, eq, getTableColumns, gte, inArray, lte, ne } from 'drizzle-orm';
+ import { previewIntervals, type Intervals } from '@/lib/srs/interval';
+ import {
+   ANSWER_GRADE,
+@@ -38,30 +38,31 @@ export interface StudyCard {
+   intervals: Intervals; // 응답별 다음 복습까지(ms). 답 버튼에 보여 준다
+ }
+ 
+-function countIntroducedToday(db: Db, now: Date): number {
++// 큐와 수는 모두 그 사용자의 카드만 센다(M6-2).
++function countIntroducedToday(db: Db, userId: string, now: Date): number {
+   const row = db
+     .select({ total: count() })
+     .from(words)
+-    .where(gte(words.introducedAt, startOfLocalDay(now)))
++    .where(and(eq(words.userId, userId), gte(words.introducedAt, startOfLocalDay(now))))
+     .get();
+   return row?.total ?? 0;
+ }
+ 
+-function dueReviews(db: Db, now: Date): WordRow[] {
++function dueReviews(db: Db, userId: string, now: Date): WordRow[] {
+   return db
+     .select()
+     .from(words)
+-    .where(and(ne(words.state, NEW_STATE), lte(words.due, now)))
++    .where(and(eq(words.userId, userId), ne(words.state, NEW_STATE), lte(words.due, now)))
+     .orderBy(asc(words.due), asc(words.id))
+     .all();
+ }
+ 
+-function newCards(db: Db, limit: number): WordRow[] {
++function newCards(db: Db, userId: string, limit: number): WordRow[] {
+   if (limit <= 0) return [];
+   return db
+     .select()
+     .from(words)
+-    .where(eq(words.state, NEW_STATE))
++    .where(and(eq(words.userId, userId), eq(words.state, NEW_STATE)))
+     .orderBy(asc(words.createdAt), asc(words.id))
+     .limit(limit)
+     .all();
+@@ -94,9 +95,9 @@ function usagesByWord(db: Db, wordIds: number[]): Map<number, Usage[]> {
+ }
+ 
+ // 오늘의 큐: 복습할 때가 된 카드(due 순) + 새 카드(만든 순, 하루 상한까지). 스펙 8.6.
+-export function getStudyQueue(db: Db, now: Date, dailyNewLimit: number): StudyCard[] {
+-  const slots = newCardSlots(dailyNewLimit, countIntroducedToday(db, now));
+-  const picked = [...dueReviews(db, now), ...newCards(db, slots)];
++export function getStudyQueue(db: Db, userId: string, now: Date, dailyNewLimit: number): StudyCard[] {
++  const slots = newCardSlots(dailyNewLimit, countIntroducedToday(db, userId, now));
++  const picked = [...dueReviews(db, userId, now), ...newCards(db, userId, slots)];
+   const usages = usagesByWord(db, picked.map((w) => w.id));
+   return picked.map((w) => ({
+     wordId: w.id,
+@@ -110,6 +111,7 @@ export function getStudyQueue(db: Db, now: Date, dailyNewLimit: number): StudyCa
+ 
+ export function countStudyToday(
+   db: Db,
++  userId: string,
+   now: Date,
+   dailyNewLimit: number,
+ ): { review: number; fresh: number } {
+@@ -117,11 +119,15 @@ export function countStudyToday(
+     db
+       .select({ total: count() })
+       .from(words)
+-      .where(and(ne(words.state, NEW_STATE), lte(words.due, now)))
++      .where(and(eq(words.userId, userId), ne(words.state, NEW_STATE), lte(words.due, now)))
+       .get()?.total ?? 0;
+   const waiting =
+-    db.select({ total: count() }).from(words).where(eq(words.state, NEW_STATE)).get()?.total ?? 0;
+-  const slots = newCardSlots(dailyNewLimit, countIntroducedToday(db, now));
++    db
++      .select({ total: count() })
++      .from(words)
++      .where(and(eq(words.userId, userId), eq(words.state, NEW_STATE)))
++      .get()?.total ?? 0;
++  const slots = newCardSlots(dailyNewLimit, countIntroducedToday(db, userId, now));
+   return { review, fresh: Math.min(waiting, slots) };
+ }
+ 
+@@ -177,12 +183,17 @@ function restore(s: CardSnapshot) {
+ // logId는 이 응답의 기록 id다. 직전 응답 되돌리기(undoAnswer)에 쓴다.
+ export function recordAnswer(
+   db: Db,
++  userId: string,
+   wordId: number,
+   answer: Answer,
+   now: Date,
+ ): { due: Date; intervals: Intervals; logId: number } {
+   return db.transaction((tx) => {
+-    const word = tx.select().from(words).where(eq(words.id, wordId)).get();
++    const word = tx
++      .select()
++      .from(words)
++      .where(and(eq(words.id, wordId), eq(words.userId, userId)))
++      .get();
+     if (!word) throw new StudyError('카드를 찾을 수 없습니다.');
+     const next = applyAnswer(word, answer, now);
+     tx.update(words)
+@@ -200,9 +211,15 @@ export function recordAnswer(
+ 
+ // 직전 응답 되돌리기: 카드를 응답 전 상태로 되돌리고 그 기록을 지운다.
+ // 그 카드의 가장 최근 기록만 되돌린다(다른 탭에서 또 답했으면 거부). 되돌린 카드의 wordId를 돌려준다.
+-export function undoAnswer(db: Db, logId: number): { wordId: number } {
++export function undoAnswer(db: Db, userId: string, logId: number): { wordId: number } {
+   return db.transaction((tx) => {
+-    const log = tx.select().from(reviewLogs).where(eq(reviewLogs.id, logId)).get();
++    // 그 사용자의 카드에 남긴 기록만 되돌린다. 남의 기록 id는 "없음"과 같다.
++    const log = tx
++      .select(getTableColumns(reviewLogs))
++      .from(reviewLogs)
++      .innerJoin(words, eq(words.id, reviewLogs.wordId))
++      .where(and(eq(reviewLogs.id, logId), eq(words.userId, userId)))
++      .get();
+     if (!log) throw new StudyError('되돌릴 응답이 없습니다.');
+     if (log.prevCard === null) throw new StudyError('이 응답은 되돌릴 수 없습니다.');
+     const latest = tx
+diff --git a/src/server/repo/vocabulary.ts b/src/server/repo/vocabulary.ts
+index 460b91b..db26586 100644
+--- a/src/server/repo/vocabulary.ts
++++ b/src/server/repo/vocabulary.ts
+@@ -1,10 +1,13 @@
++import { eq } from 'drizzle-orm';
+ import type { Db } from '../db/client';
+ import { knownWords, words } from '../db/schema';
+ 
+-export function listKnownLemmas(db: Db): Set<string> {
+-  return new Set(db.select({ lemma: knownWords.lemma }).from(knownWords).all().map((r) => r.lemma));
++export function listKnownLemmas(db: Db, userId: string): Set<string> {
++  return new Set(
++    db.select({ lemma: knownWords.lemma }).from(knownWords).where(eq(knownWords.userId, userId)).all().map((r) => r.lemma),
++  );
+ }
+ 
+-export function listWordLemmas(db: Db): Set<string> {
+-  return new Set(db.select({ lemma: words.lemma }).from(words).all().map((r) => r.lemma));
++export function listWordLemmas(db: Db, userId: string): Set<string> {
++  return new Set(db.select({ lemma: words.lemma }).from(words).where(eq(words.userId, userId)).all().map((r) => r.lemma));
+ }
+diff --git a/src/server/services/enrich.ts b/src/server/services/enrich.ts
+index 4726c28..78cdc8a 100644
+--- a/src/server/services/enrich.ts
++++ b/src/server/services/enrich.ts
+@@ -38,8 +38,8 @@ export function defaultEnrichDeps(): EnrichDeps {
+ 
+ // 용례들의 뜻을 만들어 저장한다. 성공은 done, 실패는 failed. 저장 직후 채우기와 다시 만들기가 함께 쓴다.
+ // 이미 뜻이 있던 용례(done)는 새로 만들다 실패해도 원래 뜻을 그대로 둔다.
+-async function generateAndStore(db: Db, occurrenceIds: readonly number[], model: MeaningModel) {
+-  const rows = listMeaningRequests(db, occurrenceIds);
++async function generateAndStore(db: Db, userId: string, occurrenceIds: readonly number[], model: MeaningModel) {
++  const rows = listMeaningRequests(db, userId, occurrenceIds);
+   const hadMeaning = new Set(rows.filter((r) => r.meaningStatus === 'done').map((r) => r.id));
+   const outcome = await generateMeanings(
+     rows.map((r) => ({ id: r.id, word: r.lemma, sentence: r.sentence })),
+@@ -51,26 +51,28 @@ async function generateAndStore(db: Db, occurrenceIds: readonly number[], model:
+   return { done: outcome.done.length, failed: outcome.failedIds.length };
+ }
+ 
+-async function fillMeanings(db: Db, occurrenceIds: number[], model: MeaningModel | null) {
++async function fillMeanings(db: Db, userId: string, occurrenceIds: number[], model: MeaningModel | null) {
+   if (!model) {
+-    markMeaningsFailed(db, listMeaningRequests(db, occurrenceIds).map((r) => r.id));
++    markMeaningsFailed(db, listMeaningRequests(db, userId, occurrenceIds).map((r) => r.id));
+     return;
+   }
+-  await generateAndStore(db, occurrenceIds, model);
++  await generateAndStore(db, userId, occurrenceIds, model);
+ }
+ 
+ export type RegenerateResult = { error: 'missing-key' } | { error: null; done: number; failed: number };
+ 
+ // 뜻 다시 만들기: 실패한 뜻을 채우거나, 이상한 뜻을 새로 받는다(단어 하나 또는 여러 개).
+ // 키가 없으면 아무것도 바꾸지 않고 알린다.
++// 그 사용자의 용례만 다시 만든다(남의 id는 listMeaningRequests에서 빠진다).
+ export async function regenerateMeanings(
+   db: Db,
++  userId: string,
+   occurrenceIds: readonly number[],
+   model: MeaningModel | null,
+ ): Promise<RegenerateResult> {
+   if (!model) return { error: 'missing-key' };
+   if (occurrenceIds.length === 0) return { error: null, done: 0, failed: 0 };
+-  return { error: null, ...(await generateAndStore(db, occurrenceIds, model)) };
++  return { error: null, ...(await generateAndStore(db, userId, occurrenceIds, model)) };
+ }
+ 
+ async function fillPhonetics(db: Db, wordIds: number[], lookup: EnrichDeps['lookupPhonetic']) {
+@@ -87,12 +89,13 @@ const ENRICH_FAILED_MESSAGE = '뜻과 발음을 채우지 못했습니다.';
+ // 예상하지 못한 예외가 나도 문서가 processing에 멈추지 않게 error로 끝내고, 남은 뜻은 failed로 둔다.
+ export async function enrichDocument(
+   db: Db,
++  userId: string,
+   documentId: number,
+   saved: SavedCards,
+   deps: EnrichDeps,
+ ): Promise<void> {
+   const results = await Promise.allSettled([
+-    fillMeanings(db, saved.occurrenceIds, deps.meaningModel),
++    fillMeanings(db, userId, saved.occurrenceIds, deps.meaningModel),
+     fillPhonetics(db, saved.wordIds, deps.lookupPhonetic),
+   ]);
+   const failures = results.filter((r) => r.status === 'rejected');
+diff --git a/src/server/services/ingest.ts b/src/server/services/ingest.ts
+index 689ffad..c6b4ad0 100644
+--- a/src/server/services/ingest.ts
++++ b/src/server/services/ingest.ts
+@@ -47,19 +47,19 @@ export function defaultTitle(fileName: string): string {
+ }
+ 
+ // 업로드 검증 → 문서 생성 → 문장 추출 → 후보 저장. 처리 실패는 문서 상태(error)로 남긴다.
+-export async function ingestPdf(db: Db, input: IngestInput): Promise<IngestResult> {
++export async function ingestPdf(db: Db, userId: string, input: IngestInput): Promise<IngestResult> {
+   validateUpload(input.bytes);
+   const title = input.title.trim() || defaultTitle(input.fileName);
+-  const doc = createDocument(db, { title, kind: input.kind });
++  const doc = createDocument(db, userId, { title, kind: input.kind });
+ 
+   try {
+     const sentences = await parsePdf(input.bytes, { isKnownWord: isFrequentWord, isRealWord });
+-    const settings = getSettings(db);
++    const settings = getSettings(db, userId);
+     const found = extractCandidates(sentences, {
+       excludeTopN: settings.excludeTopN,
+       rankOf,
+-      knownLemmas: listKnownLemmas(db),
+-      existingLemmas: listWordLemmas(db),
++      knownLemmas: listKnownLemmas(db, userId),
++      existingLemmas: listWordLemmas(db, userId),
+       inDictionary,
+     });
+     replaceCandidates(db, doc.id, found);
+diff --git a/src/server/services/usage-meaning.ts b/src/server/services/usage-meaning.ts
+index 03b4765..1973230 100644
+--- a/src/server/services/usage-meaning.ts
++++ b/src/server/services/usage-meaning.ts
+@@ -13,14 +13,15 @@ export type RegenerateUsageResult =
+ // 입력은 브라우저가 보낸 값이므로 unknown으로 받아 형태부터 확인한다.
+ export async function regenerateUsageMeaning(
+   db: Db,
++  userId: string,
+   occurrenceId: unknown,
+   model: MeaningModel | null,
+ ): Promise<RegenerateUsageResult> {
+   if (!isId(occurrenceId)) return { error: '잘못된 요청입니다.' };
+-  if (!getOccurrenceMeaning(db, occurrenceId)) return { error: '용례를 찾을 수 없습니다.' };
+-  const result = await regenerateMeanings(db, [occurrenceId], model);
++  if (!getOccurrenceMeaning(db, userId, occurrenceId)) return { error: '용례를 찾을 수 없습니다.' };
++  const result = await regenerateMeanings(db, userId, [occurrenceId], model);
+   if (result.error === 'missing-key') return { error: MISSING_KEY_MESSAGE };
+-  const meaning = getOccurrenceMeaning(db, occurrenceId);
++  const meaning = getOccurrenceMeaning(db, userId, occurrenceId);
+   if (!meaning) return { error: '용례를 찾을 수 없습니다.' }; // 그 사이 카드가 지워졌다
+   return { error: null, ...meaning, failed: result.failed > 0 };
+ }

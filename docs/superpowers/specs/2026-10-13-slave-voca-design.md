@@ -18,9 +18,9 @@
 
 | 항목 | 결정 |
 |---|---|
-| 사용자 | 본인 1명, 로그인 없음 |
+| 사용자 | 비공개 베타(지인 10명 안팎). Google 로그인, 관리자 승인 후 사용, 데이터는 사용자별(M6). 처음에는 본인 1명·로그인 없음이었다 |
 | 실행 환경 | 로컬 PC에서 실행, PC 브라우저로 접속 |
-| 배포 | 1차 범위 밖. 단, 저장소 계층을 분리해 나중에 옮기기 쉽게 설계 |
+| 배포 | 베타 로드맵 C단계(0.7.0)에서 한다(11장 5번). 저장소 계층을 분리해 두었다 |
 | 스택 | Next.js(App Router, TypeScript) 하나로 화면과 서버 |
 | DB | SQLite (Drizzle ORM + better-sqlite3) |
 | 단어 추출 | 빈도 기준(wordfreq). 흔한 단어 상위 3,000개(원형 기준) 제외, 설정에서 변경 가능 (M5에서 5,000 → 3,000) |
@@ -87,13 +87,14 @@ scripts/
 
 | 테이블 | 컬럼 | 비고 |
 |---|---|---|
-| `documents` | id, title, kind(paper/presentation), status(extracting/reviewing/processing/done/error), error_message, created_at | 원본 PDF는 저장하지 않음 |
+| `documents` | id, user_id, title, kind(paper/presentation), status(extracting/reviewing/processing/done/error), error_message, created_at | 원본 PDF는 저장하지 않음 |
 | `candidates` | id, document_id, lemma, surface, sentence, count, is_existing, in_dictionary | 검토가 끝나면 해당 문서 행 삭제 |
-| `words` | id, lemma(unique), phonetic, FSRS 상태(due, stability, difficulty, elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review), introduced_at, created_at | 카드 1장 = 단어 1개 |
+| `words` | id, user_id, lemma((user_id, lemma) unique), phonetic, FSRS 상태(due, stability, difficulty, elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review), introduced_at, created_at | 카드 1장 = 단어 1개 |
 | `occurrences` | id, word_id, document_id, surface, sentence, meaning_ko, meaning_status(pending/done/failed), created_at | 같은 단어도 문서마다 뜻이 다를 수 있어 뜻은 여기에 저장 |
-| `known_words` | lemma(PK), created_at | 추출에서 제외 |
+| `known_words` | user_id, lemma((user_id, lemma) PK), created_at | 추출에서 제외 |
 | `review_logs` | id, word_id, rating, reviewed_at | 복습 기록 |
-| `settings` | key(PK), value | `exclude_top_n`=3000, `daily_new_limit`=20 |
+| `settings` | user_id, key((user_id, key) PK), value | `exclude_top_n`=3000, `daily_new_limit`=20 |
+| `users`·`sessions`·`accounts`·`verifications` | Better Auth 표. `users`에 status(pending/approved/blocked), role(user/admin) | M6-1. 후보·용례·복습 기록은 문서·단어를 따라 사용자별로 나뉜다(M6-2) |
 
 - 같은 단어가 다른 문서에서 다시 저장되면 `words`는 그대로 두고 `occurrences`만 추가한다. SRS 상태는 초기화하지 않는다.
 - 카드 삭제는 `words`와 그 `occurrences`, `review_logs`를 함께 지운다. 삭제한 단어는 `known_words`에 넣지 않는다.
@@ -211,6 +212,8 @@ scripts/
 5. **배포 준비(베타 로드맵, 2026-10-16 사용자 결정):** 목표는 수익화. 먼저 지인 10명 안팎의 비공개 베타(1.0.0), 결제는 그 뒤(1.x). 단계: A 데이터 라이선스(0.5.0) → B 로그인·사용자별 데이터(0.6.0) → C 배포 기반·사용량 제한·모바일 화면(0.7.0) → D 개인정보 안내·서비스 이름·배포(1.0.0) → E 결제
    - **M5 (설계, 2026-10-16):** A 데이터 라이선스. 빈도표를 wordfreq(CC BY-SA 4.0)로, N 기본값 3,000, 학술 핵심어 예외와 사전 API를 없앰. 설계 `docs/superpowers/specs/2026-10-16-m5-data-license-design.md`, 계획 `docs/superpowers/plans/2026-10-16-m5-data-license.md`
    - **M5 (완료, 2026-10-16, v0.5.0):** 위 내용으로 릴리스
+   - **M6-1 (완료, 2026-10-16, PR #10):** 로그인·가입 승인·관리 화면
+   - **M6-2 (계획, 2026-10-16):** 사용자별 데이터. 계획 `docs/superpowers/plans/2026-10-16-m6-2-per-user-data.md`
    - **M6 (설계, 2026-10-16):** B 로그인·사용자별 데이터. Google 로그인(Better Auth 1.7.7), 누구나 가입 신청 → 관리자(`ADMIN_EMAILS`) 승인, 사용 중지 시 세션 삭제, 개발 전용 로그인(localhost에서만). M6-1 인증 기반·화면, M6-2 사용자별 데이터로 나누고 둘 다 끝나면 v0.6.0. 설계 `docs/superpowers/specs/2026-10-16-m6-login-per-user-design.md`, 화면 규칙 `docs/superpowers/specs/2026-10-16-m6-1-auth-screens.md`, 계획 `docs/superpowers/plans/2026-10-16-m6-1-auth.md`
 
 ## 12. 열린 항목
@@ -247,3 +250,4 @@ scripts/
 - 2026-10-16: 브랜치·PR 흐름과 버전 관리 결정(사용자). main은 배포용, development는 개발 통합용(기본 브랜치). 설계 `docs/superpowers/specs/2026-10-16-github-flow-versioning-design.md`, 첫 릴리스 v0.4.0
 - 2026-10-16: 배포 준비 로드맵(비공개 베타 먼저) 추가. M5 설계: 빈도표 wordfreq, N 기본값 3,000, 학술 핵심어 예외·사전 API 없앰(2장, 8.2, 8.3, 8.5, 8.7, 10장, 12장)
 - 2026-10-16: M5 릴리스(v0.5.0). M6(로그인·가입 승인·사용자별 데이터) 설계와 M6-1 계획 추가. 1장의 "사용자 1명, 로그인 없음"은 M6에서 바뀐다
+- 2026-10-16: M6-1 완료 반영, M6-2 계획 추가. 1장 사용자·배포, 7장 데이터 모델(user_id, 인증 표) 갱신
