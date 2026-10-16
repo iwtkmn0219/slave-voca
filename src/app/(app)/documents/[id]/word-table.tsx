@@ -5,7 +5,7 @@ import { buttonClass } from "@/components/ui/button";
 import { Highlighted } from "@/components/ui/highlighted";
 import { Kbd } from "@/components/ui/kbd";
 import { RegenIdleButton, RegenSlot, type RegenState } from "@/components/ui/regen-slot";
-import { REGEN_FAILED } from "@/lib/regen-messages";
+import { LIMIT_SLOT, REGEN_FAILED } from "@/lib/regen-messages";
 import { Failed, Spinner } from "@/components/ui/status";
 import { keepFocus } from "@/lib/ui/keys";
 import type { OccurrenceView } from "@/server/repo/cards";
@@ -72,7 +72,8 @@ export function WordTable({ documentId, rows }: { documentId: number; rows: Word
     setRowRegen(row.id, { phase: "busy" });
     regenerateDocumentMeanings(documentId, [row.id])
       .then((result) => {
-        if (result.error !== null) setRowRegen(row.id, { phase: "failed", text: result.error });
+        if (result.error !== null && result.limitResetsOn) setRowRegen(row.id, { phase: "limited", text: LIMIT_SLOT });
+        else if (result.error !== null) setRowRegen(row.id, { phase: "failed", text: result.error });
         else if (result.failed > 0) setRowRegen(row.id, { phase: "failed", text: REGEN_FAILED });
         else setRowRegen(row.id, { phase: "done" });
       })
@@ -126,7 +127,7 @@ export function WordTable({ documentId, rows }: { documentId: number; rows: Word
                   )}
                   {/* opacity-0: 자리는 늘 차지해 행 높이가 변하지 않고, invisible과 달리 Tab으로 닿는다(포커스가 들어오면 보인다). 상태가 있거나 삭제 확인 중이면 늘 보인다 */}
                   <div
-                    className={`mt-1.5 flex h-5 items-center text-[13px] ${
+                    className={`mt-1.5 flex min-h-5 items-center text-[13px] ${
                       regen.has(r.id) || deleting?.id === r.id
                         ? ""
                         : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"

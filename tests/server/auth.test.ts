@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDb, type Db } from '@/server/db/client';
 import { users } from '@/server/db/schema';
 import { createAuth } from '@/server/auth/auth';
@@ -45,5 +45,21 @@ describe('createAuth', () => {
     const auth = createAuth(db, { ...env, AUTH_DEV_LOGIN: undefined });
     await expect(signUp(auth, 'friend@example.com')).rejects.toThrow();
     expect(db.select().from(users).all()).toEqual([]);
+  });
+});
+
+describe('sign-up alert', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('tells the admin about a pending sign-up, but not about an admin account', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const auth = createAuth(db, { ...env, ALERT_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/x' });
+    await signUp(auth, 'owner@example.com');
+    await signUp(auth, 'friend@example.com');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetcher.mock.calls[0][1] as RequestInit).body as string) as { content: string };
+    expect(body.content).toBe('가입 신청: friend (friend@example.com)\nhttp://localhost:3300/admin');
   });
 });

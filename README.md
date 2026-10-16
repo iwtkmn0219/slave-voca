@@ -8,7 +8,7 @@
 
 설계와 개발 기록은 `docs/superpowers/`에 있습니다(한국어).
 
-> 로그인이 없는 1인용 로컬 앱입니다. 인터넷에 그대로 열어 두지 마세요. 주소를 아는 누구나 PDF를 올려 Gemini 요금을 쓰고 카드를 고칠 수 있습니다.
+> Google 로그인과 관리자 승인을 거친 사람만 씁니다. 뜻 만들기(Gemini)에는 사용자별 월 한도와 전체 월 비용 상한이 있습니다(아래 "사용량 한도와 알림").
 
 ## 실행
 
@@ -35,6 +35,22 @@ npm run dev
 3. "사용자 인증 정보 → 사용자 인증 정보 만들기 → OAuth 클라이언트 ID"에서 "웹 애플리케이션"을 고른다.
    - 승인된 리디렉션 URI: `<BETTER_AUTH_URL>/api/auth/callback/google` (예: `http://localhost:3000/api/auth/callback/google`). 배포 주소가 생기면 그 주소도 더한다.
 4. 받은 클라이언트 ID와 보안 비밀을 `.env.local`의 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`에 넣고, `BETTER_AUTH_SECRET`(32자 이상 무작위)과 `ADMIN_EMAILS`(내 Google 이메일)를 채운다.
+
+### 사용량 한도와 알림
+
+뜻을 만들 때(검토 저장, 뜻 다시 만들기) Gemini 비용이 듭니다. 그래서 두 가지 한도를 둡니다. 한 달은 한국 시간 매월 1일 0시부터입니다.
+
+- `MONTHLY_WORD_LIMIT`(기본 4000): 사용자 한 명이 한 달에 뜻을 만들 수 있는 단어 수
+- `GEMINI_MONTHLY_BUDGET_USD`(기본 5): 서비스 전체의 한 달 Gemini 비용 상한(달러)
+
+한도에 걸리면 저장·다시 만들기가 막히고 다음 달 1일에 다시 열린다고 알립니다. 복습은 계속됩니다. 사용자별 단어 수와 이번 달 비용은 관리 화면(`/admin`)에서 봅니다.
+
+`ALERT_WEBHOOK_URL`에 Discord(`https://discord.com/api/webhooks/…`) 또는 Slack(`https://hooks.slack.com/…`) 웹훅 주소를 넣으면 관리자에게 알림이 갑니다. 비워 두면 서버 로그에만 남습니다.
+
+- 가입 신청(승인 대기)
+- 누가 이번 달 한도에 닿았을 때(사용자마다 한 달에 한 번)
+- 이번 달 비용이 상한의 80%, 100%에 닿았을 때(한 달에 한 번씩)
+- 서버 오류(같은 오류는 10분에 한 번)
 
 ### 이전 데이터 옮기기(M6 이전에 쓰던 DB)
 

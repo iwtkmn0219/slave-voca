@@ -145,6 +145,37 @@ export const settings = sqliteTable(
   (t) => [primaryKey({ columns: [t.userId, t.key] })],
 );
 
+export const USAGE_SOURCES = ["save", "regenerate", "card"] as const;
+export type UsageSource = (typeof USAGE_SOURCES)[number];
+
+// 뜻 만들기 요청 한 번(검토 저장, 문서의 다시 만들기, 카드의 다시 만들기)마다 한 줄(C-1).
+// 개인 한도는 words로, 전체 상한은 cost_usd로 센다. 요청 전에 예상 비용으로 맡아 두고(settled=false),
+// 끝나면 실제 토큰과 비용으로 바꾼다. 사용자를 지워도 비용은 남겨 이번 달 지출이 줄지 않게 한다.
+export const meaningUsage = sqliteTable(
+  "meaning_usage",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    source: text("source", { enum: USAGE_SOURCES }).notNull(),
+    words: integer("words").notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    costUsd: real("cost_usd").notNull(),
+    settled: integer("settled", { mode: "boolean" }).notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("meaning_usage_created_at_idx").on(t.createdAt),
+    index("meaning_usage_user_id_created_at_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+// 한 번만 보내는 알림의 기록(예: "budget-80:2026-10"). 서버가 다시 시작해도 다시 보내지 않게 DB에 둔다.
+export const alertLog = sqliteTable("alert_log", {
+  key: text("key").primaryKey(),
+  createdAt: createdAt(),
+});
+
 export type DocumentRow = typeof documents.$inferSelect;
 export type CandidateRow = typeof candidates.$inferSelect;
 export type WordRow = typeof words.$inferSelect;

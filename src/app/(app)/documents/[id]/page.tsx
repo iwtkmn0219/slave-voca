@@ -6,7 +6,7 @@ import { Notice } from "@/components/ui/notice";
 import { getDb } from "@/server/db/client";
 import { countOccurrencesByWord, listOccurrencesByDocument } from "@/server/repo/cards";
 import { getDocument } from "@/server/repo/documents";
-import { RetryAllButton } from "./retry-all-button";
+import { FailedMeaningsNotice } from "./retry-all-button";
 import { WordTable } from "./word-table";
 import { requireUser } from "@/server/auth/current-user";
 
@@ -54,19 +54,7 @@ async function DocumentWords({ params }: { params: Promise<{ id: string }> }) {
         </Notice>
       )}
       {doc.status === "error" && doc.errorMessage && <Notice className="mt-4">{doc.errorMessage}</Notice>}
-      {failed > 0 && (
-        <Notice className="mt-4">
-          뜻 <span className="tabular-nums">{failed}</span>개를 만들지 못했습니다
-          {missingKey ? (
-            <>
-              {" "}
-              · GEMINI_API_KEY 없음. <span className="text-muted">.env.local에 키를 넣고 서버를 다시 시작하세요.</span>
-            </>
-          ) : (
-            <RetryAllButton documentId={doc.id} />
-          )}
-        </Notice>
-      )}
+      {failed > 0 && <FailedMeaningsNotice documentId={doc.id} failed={failed} missingKey={missingKey} />}
 
       <WordTable documentId={doc.id} rows={rows.map((r) => ({ ...r, usageCount: usage.get(r.wordId) ?? 1 }))} />
     </main>

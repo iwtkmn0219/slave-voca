@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { isId, parseIdList } from "@/lib/validate";
 import { getDb } from "@/server/db/client";
 import { deleteCard, listFailedMeaningIds, occurrencesBelongTo } from "@/server/repo/cards";
-import { MISSING_KEY_MESSAGE } from "@/lib/regen-messages";
+import { LIMIT_SLOT, MISSING_KEY_MESSAGE } from "@/lib/regen-messages";
 import { defaultMeaningModel, regenerateMeanings } from "@/server/services/enrich";
 import { requireUser } from "@/server/auth/current-user";
 
@@ -17,7 +17,10 @@ function refresh(documentId: number) {
   revalidatePath("/");
 }
 
-export type RegenerateActionResult = { error: string } | { error: null; done: number; failed: number };
+// limitResetsOn이 있으면 한도에 걸린 것이다.
+export type RegenerateActionResult =
+  | { error: string; limitResetsOn?: string }
+  | { error: null; done: number; failed: number };
 
 // 뜻 다시 만들기. occurrenceIds가 비어 있으면 이 문서의 실패한 뜻 전체("모두 다시 시도"),
 // 있으면 그 용례들(이미 뜻이 있어도 새로 받는다. 실패하면 원래 뜻을 둔다).
@@ -33,6 +36,7 @@ export async function regenerateDocumentMeanings(
   const targets = ids.length > 0 ? ids : listFailedMeaningIds(db, user.id, documentId);
   const result = await regenerateMeanings(db, user.id, targets, defaultMeaningModel());
   if (result.error === "missing-key") return { error: MISSING_KEY_MESSAGE };
+  if (result.error === "usage-limit") return { error: LIMIT_SLOT, limitResetsOn: result.resetsOn };
   refresh(documentId);
   return result;
 }

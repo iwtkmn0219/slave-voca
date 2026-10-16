@@ -48,3 +48,14 @@ export function Failed({ children }: { children: React.ReactNode }) {
     </span>
   );
 }
+
+// 이번 달 사용량 한도처럼 고장이 아닌 "못 하는" 상태: 짧은 hard 실선 + 회색 글자(C 화면 규칙 3장).
+// 글이 여러 줄이 되면 표시 줄은 첫 줄에 맞춘다.
+export function Limited({ children, className = "text-[13px]" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <span className={`inline-flex items-baseline gap-1.5 whitespace-normal text-muted ${className}`}>
+      <span aria-hidden className="w-2.5 shrink-0 -translate-y-[3px] border-t-2 border-hard" />
+      <span>{children}</span>
+    </span>
+  );
+}

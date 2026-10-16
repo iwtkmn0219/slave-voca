@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { nextCookies } from 'better-auth/next-js';
 import { devLoginEnabled, initialAccess, parseAdminEmails } from '@/lib/auth/policy';
+import { notify } from '../alerts/notify';
 import { getDb, type Db } from '../db/client';
 import * as schema from '../db/schema';
 
@@ -33,11 +34,21 @@ export function createAuth(db: Db, env: AuthEnv = process.env) {
       user: {
         create: {
           before: async (user) => ({ data: { ...user, ...initialAccess(user.email, admins) } }),
+          // 승인 대기로 들어온 가입을 관리자에게 알린다(C-1). 알림을 못 보내도 가입은 그대로 된다.
+          after: async (user) => {
+            if ((user as { status?: unknown }).status !== 'pending') return;
+            void notify(`가입 신청: ${user.name} (${user.email})\n${adminUrl(env)}`, env);
+          },
         },
       },
     },
     plugins: [nextCookies()], // 마지막 플러그인이어야 한다(Better Auth 안내)
   });
+}
+
+// 알림에 넣는 관리 화면 주소.
+function adminUrl(env: AuthEnv): string {
+  return new URL('/admin', env.BETTER_AUTH_URL ?? 'http://localhost').toString();
 }
 
 export type Auth = ReturnType<typeof createAuth>;
