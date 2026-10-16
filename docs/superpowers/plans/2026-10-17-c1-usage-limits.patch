@@ -1,0 +1,2924 @@
+diff --git a/.env.example b/.env.example
+index 41649b1..c91ac4d 100644
+--- a/.env.example
++++ b/.env.example
+@@ -15,3 +15,10 @@ ADMIN_EMAILS=
+ 
+ # 개발 전용 로그인(이메일만으로 들어가기). BETTER_AUTH_URL이 localhost·127.0.0.1일 때만 켜진다.
+ AUTH_DEV_LOGIN=
++
++# 뜻 만들기(Gemini) 한도. 한 달은 한국 시간 매월 1일부터. 비우면 기본값(4000단어, $5)
++MONTHLY_WORD_LIMIT=
++GEMINI_MONTHLY_BUDGET_USD=
++
++# 관리자 알림을 받을 Discord 또는 Slack 웹훅 주소. 비우면 서버 로그에만 남긴다
++ALERT_WEBHOOK_URL=
+diff --git a/README.md b/README.md
+index d133df0..0114400 100644
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@
+ 
+ 설계와 개발 기록은 `docs/superpowers/`에 있습니다(한국어).
+ 
+-> 로그인이 없는 1인용 로컬 앱입니다. 인터넷에 그대로 열어 두지 마세요. 주소를 아는 누구나 PDF를 올려 Gemini 요금을 쓰고 카드를 고칠 수 있습니다.
++> Google 로그인과 관리자 승인을 거친 사람만 씁니다. 뜻 만들기(Gemini)에는 사용자별 월 한도와 전체 월 비용 상한이 있습니다(아래 "사용량 한도와 알림").
+ 
+ ## 실행
+ 
+@@ -36,6 +36,22 @@ npm run dev
+    - 승인된 리디렉션 URI: `<BETTER_AUTH_URL>/api/auth/callback/google` (예: `http://localhost:3000/api/auth/callback/google`). 배포 주소가 생기면 그 주소도 더한다.
+ 4. 받은 클라이언트 ID와 보안 비밀을 `.env.local`의 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`에 넣고, `BETTER_AUTH_SECRET`(32자 이상 무작위)과 `ADMIN_EMAILS`(내 Google 이메일)를 채운다.
+ 
++### 사용량 한도와 알림
++
++뜻을 만들 때(검토 저장, 뜻 다시 만들기) Gemini 비용이 듭니다. 그래서 두 가지 한도를 둡니다. 한 달은 한국 시간 매월 1일 0시부터입니다.
++
++- `MONTHLY_WORD_LIMIT`(기본 4000): 사용자 한 명이 한 달에 뜻을 만들 수 있는 단어 수
++- `GEMINI_MONTHLY_BUDGET_USD`(기본 5): 서비스 전체의 한 달 Gemini 비용 상한(달러)
++
++한도에 걸리면 저장·다시 만들기가 막히고 다음 달 1일에 다시 열린다고 알립니다. 복습은 계속됩니다. 사용자별 단어 수와 이번 달 비용은 관리 화면(`/admin`)에서 봅니다.
++
++`ALERT_WEBHOOK_URL`에 Discord(`https://discord.com/api/webhooks/…`) 또는 Slack(`https://hooks.slack.com/…`) 웹훅 주소를 넣으면 관리자에게 알림이 갑니다. 비워 두면 서버 로그에만 남습니다.
++
++- 가입 신청(승인 대기)
++- 누가 이번 달 한도에 닿았을 때(사용자마다 한 달에 한 번)
++- 이번 달 비용이 상한의 80%, 100%에 닿았을 때(한 달에 한 번씩)
++- 서버 오류(같은 오류는 10분에 한 번)
++
+ ### 이전 데이터 옮기기(M6 이전에 쓰던 DB)
+ 
+ 로그인이 생기기 전의 문서·카드·아는 단어·설정은 업그레이드할 때 임시 소유자에게 묶입니다. 내 계정으로 옮기려면 다음 순서를 따릅니다.
+diff --git a/drizzle/0007_usage.sql b/drizzle/0007_usage.sql
+new file mode 100644
+index 0000000..0890253
+--- /dev/null
++++ b/drizzle/0007_usage.sql
+@@ -0,0 +1,20 @@
++CREATE TABLE `alert_log` (
++	`key` text PRIMARY KEY NOT NULL,
++	`created_at` integer NOT NULL
++);
++--> statement-breakpoint
++CREATE TABLE `meaning_usage` (
++	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
++	`user_id` text,
++	`source` text NOT NULL,
++	`words` integer NOT NULL,
++	`input_tokens` integer DEFAULT 0 NOT NULL,
++	`output_tokens` integer DEFAULT 0 NOT NULL,
++	`cost_usd` real NOT NULL,
++	`settled` integer DEFAULT false NOT NULL,
++	`created_at` integer NOT NULL,
++	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null
++);
++--> statement-breakpoint
++CREATE INDEX `meaning_usage_created_at_idx` ON `meaning_usage` (`created_at`);--> statement-breakpoint
++CREATE INDEX `meaning_usage_user_id_created_at_idx` ON `meaning_usage` (`user_id`,`created_at`);
+\ No newline at end of file
+diff --git a/drizzle/meta/0007_snapshot.json b/drizzle/meta/0007_snapshot.json
+new file mode 100644
+index 0000000..cbf234d
+--- /dev/null
++++ b/drizzle/meta/0007_snapshot.json
+@@ -0,0 +1,1094 @@
++{
++  "version": "6",
++  "dialect": "sqlite",
++  "id": "a901b521-09b6-4c8b-a654-07b4721c01db",
++  "prevId": "7a80546b-c37a-4c6a-bc79-4b7587f52c37",
++  "tables": {
++    "alert_log": {
++      "name": "alert_log",
++      "columns": {
++        "key": {
++          "name": "key",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "candidates": {
++      "name": "candidates",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "document_id": {
++          "name": "document_id",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "lemma": {
++          "name": "lemma",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "surface": {
++          "name": "surface",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "sentence": {
++          "name": "sentence",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "count": {
++          "name": "count",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "is_existing": {
++          "name": "is_existing",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "in_dictionary": {
++          "name": "in_dictionary",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": true
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "candidates_document_id_documents_id_fk": {
++          "name": "candidates_document_id_documents_id_fk",
++          "tableFrom": "candidates",
++          "tableTo": "documents",
++          "columnsFrom": [
++            "document_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "documents": {
++      "name": "documents",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "title": {
++          "name": "title",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "kind": {
++          "name": "kind",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "status": {
++          "name": "status",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'extracting'"
++        },
++        "error_message": {
++          "name": "error_message",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "documents_user_id_idx": {
++          "name": "documents_user_id_idx",
++          "columns": [
++            "user_id"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "documents_user_id_users_id_fk": {
++          "name": "documents_user_id_users_id_fk",
++          "tableFrom": "documents",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "known_words": {
++      "name": "known_words",
++      "columns": {
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "lemma": {
++          "name": "lemma",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "known_words_user_id_users_id_fk": {
++          "name": "known_words_user_id_users_id_fk",
++          "tableFrom": "known_words",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {
++        "known_words_user_id_lemma_pk": {
++          "columns": [
++            "user_id",
++            "lemma"
++          ],
++          "name": "known_words_user_id_lemma_pk"
++        }
++      },
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "meaning_usage": {
++      "name": "meaning_usage",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "source": {
++          "name": "source",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "words": {
++          "name": "words",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "input_tokens": {
++          "name": "input_tokens",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "output_tokens": {
++          "name": "output_tokens",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "cost_usd": {
++          "name": "cost_usd",
++          "type": "real",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "settled": {
++          "name": "settled",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "meaning_usage_created_at_idx": {
++          "name": "meaning_usage_created_at_idx",
++          "columns": [
++            "created_at"
++          ],
++          "isUnique": false
++        },
++        "meaning_usage_user_id_created_at_idx": {
++          "name": "meaning_usage_user_id_created_at_idx",
++          "columns": [
++            "user_id",
++            "created_at"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "meaning_usage_user_id_users_id_fk": {
++          "name": "meaning_usage_user_id_users_id_fk",
++          "tableFrom": "meaning_usage",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "set null",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "occurrences": {
++      "name": "occurrences",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "word_id": {
++          "name": "word_id",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "document_id": {
++          "name": "document_id",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "surface": {
++          "name": "surface",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "sentence": {
++          "name": "sentence",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "meaning_ko": {
++          "name": "meaning_ko",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "meaning_status": {
++          "name": "meaning_status",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'pending'"
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "occurrences_word_id_words_id_fk": {
++          "name": "occurrences_word_id_words_id_fk",
++          "tableFrom": "occurrences",
++          "tableTo": "words",
++          "columnsFrom": [
++            "word_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        },
++        "occurrences_document_id_documents_id_fk": {
++          "name": "occurrences_document_id_documents_id_fk",
++          "tableFrom": "occurrences",
++          "tableTo": "documents",
++          "columnsFrom": [
++            "document_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "review_logs": {
++      "name": "review_logs",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "word_id": {
++          "name": "word_id",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "rating": {
++          "name": "rating",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "reviewed_at": {
++          "name": "reviewed_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "prev_card": {
++          "name": "prev_card",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "review_logs_word_id_words_id_fk": {
++          "name": "review_logs_word_id_words_id_fk",
++          "tableFrom": "review_logs",
++          "tableTo": "words",
++          "columnsFrom": [
++            "word_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "settings": {
++      "name": "settings",
++      "columns": {
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "key": {
++          "name": "key",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "value": {
++          "name": "value",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {},
++      "foreignKeys": {
++        "settings_user_id_users_id_fk": {
++          "name": "settings_user_id_users_id_fk",
++          "tableFrom": "settings",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {
++        "settings_user_id_key_pk": {
++          "columns": [
++            "user_id",
++            "key"
++          ],
++          "name": "settings_user_id_key_pk"
++        }
++      },
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "words": {
++      "name": "words",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "integer",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": true
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "lemma": {
++          "name": "lemma",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "phonetic": {
++          "name": "phonetic",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "due": {
++          "name": "due",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "0"
++        },
++        "stability": {
++          "name": "stability",
++          "type": "real",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "difficulty": {
++          "name": "difficulty",
++          "type": "real",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "elapsed_days": {
++          "name": "elapsed_days",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "scheduled_days": {
++          "name": "scheduled_days",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "learning_steps": {
++          "name": "learning_steps",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "reps": {
++          "name": "reps",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "lapses": {
++          "name": "lapses",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "state": {
++          "name": "state",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": 0
++        },
++        "last_review": {
++          "name": "last_review",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "introduced_at": {
++          "name": "introduced_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "words_user_id_lemma_unique": {
++          "name": "words_user_id_lemma_unique",
++          "columns": [
++            "user_id",
++            "lemma"
++          ],
++          "isUnique": true
++        }
++      },
++      "foreignKeys": {
++        "words_user_id_users_id_fk": {
++          "name": "words_user_id_users_id_fk",
++          "tableFrom": "words",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "accounts": {
++      "name": "accounts",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "account_id": {
++          "name": "account_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "provider_id": {
++          "name": "provider_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "access_token": {
++          "name": "access_token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "refresh_token": {
++          "name": "refresh_token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "id_token": {
++          "name": "id_token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "access_token_expires_at": {
++          "name": "access_token_expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "refresh_token_expires_at": {
++          "name": "refresh_token_expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "scope": {
++          "name": "scope",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "password": {
++          "name": "password",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        }
++      },
++      "indexes": {
++        "accounts_user_id_idx": {
++          "name": "accounts_user_id_idx",
++          "columns": [
++            "user_id"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "accounts_user_id_users_id_fk": {
++          "name": "accounts_user_id_users_id_fk",
++          "tableFrom": "accounts",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "sessions": {
++      "name": "sessions",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "expires_at": {
++          "name": "expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "token": {
++          "name": "token",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "ip_address": {
++          "name": "ip_address",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "user_agent": {
++          "name": "user_agent",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "user_id": {
++          "name": "user_id",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        }
++      },
++      "indexes": {
++        "sessions_token_unique": {
++          "name": "sessions_token_unique",
++          "columns": [
++            "token"
++          ],
++          "isUnique": true
++        },
++        "sessions_user_id_idx": {
++          "name": "sessions_user_id_idx",
++          "columns": [
++            "user_id"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {
++        "sessions_user_id_users_id_fk": {
++          "name": "sessions_user_id_users_id_fk",
++          "tableFrom": "sessions",
++          "tableTo": "users",
++          "columnsFrom": [
++            "user_id"
++          ],
++          "columnsTo": [
++            "id"
++          ],
++          "onDelete": "cascade",
++          "onUpdate": "no action"
++        }
++      },
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "users": {
++      "name": "users",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "name": {
++          "name": "name",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "email": {
++          "name": "email",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "email_verified": {
++          "name": "email_verified",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": false
++        },
++        "image": {
++          "name": "image",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": false,
++          "autoincrement": false
++        },
++        "status": {
++          "name": "status",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'pending'"
++        },
++        "role": {
++          "name": "role",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "'user'"
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        }
++      },
++      "indexes": {
++        "users_email_unique": {
++          "name": "users_email_unique",
++          "columns": [
++            "email"
++          ],
++          "isUnique": true
++        }
++      },
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    },
++    "verifications": {
++      "name": "verifications",
++      "columns": {
++        "id": {
++          "name": "id",
++          "type": "text",
++          "primaryKey": true,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "identifier": {
++          "name": "identifier",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "value": {
++          "name": "value",
++          "type": "text",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "expires_at": {
++          "name": "expires_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false
++        },
++        "created_at": {
++          "name": "created_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        },
++        "updated_at": {
++          "name": "updated_at",
++          "type": "integer",
++          "primaryKey": false,
++          "notNull": true,
++          "autoincrement": false,
++          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
++        }
++      },
++      "indexes": {
++        "verifications_identifier_idx": {
++          "name": "verifications_identifier_idx",
++          "columns": [
++            "identifier"
++          ],
++          "isUnique": false
++        }
++      },
++      "foreignKeys": {},
++      "compositePrimaryKeys": {},
++      "uniqueConstraints": {},
++      "checkConstraints": {}
++    }
++  },
++  "views": {},
++  "enums": {},
++  "_meta": {
++    "schemas": {},
++    "tables": {},
++    "columns": {}
++  },
++  "internal": {
++    "indexes": {}
++  }
++}
+\ No newline at end of file
+diff --git a/drizzle/meta/_journal.json b/drizzle/meta/_journal.json
+index 1c36662..49cecd1 100644
+--- a/drizzle/meta/_journal.json
++++ b/drizzle/meta/_journal.json
+@@ -50,6 +50,13 @@
+       "when": 1792147262960,
+       "tag": "0006_per_user",
+       "breakpoints": true
++    },
++    {
++      "idx": 7,
++      "version": "6",
++      "when": 1792164859739,
++      "tag": "0007_usage",
++      "breakpoints": true
+     }
+   ]
+ }
+\ No newline at end of file
+diff --git a/src/app/(app)/admin/page.tsx b/src/app/(app)/admin/page.tsx
+index 290ac4b..3318187 100644
+--- a/src/app/(app)/admin/page.tsx
++++ b/src/app/(app)/admin/page.tsx
+@@ -3,11 +3,14 @@ import { formatJoinedAt } from "@/lib/auth/display";
+ import { requireAdmin } from "@/server/auth/current-user";
+ import { getDb } from "@/server/db/client";
+ import { countUsersByStatus, listUsers } from "@/server/repo/users";
++import { monthlySpendUsd, monthlyWordsByUser } from "@/server/repo/usage";
++import { kstMonthRange, readUsageLimits } from "@/lib/usage/limits";
++import { usd, UsageCost } from "./usage-cost";
+ import { UserTable } from "./user-table";
+ 
+ export default function AdminPage() {
+   return (
+-    <main className="mx-auto w-full max-w-[760px] px-4 pt-8 pb-12">
++    <main className="mx-auto w-full max-w-[880px] px-4 pt-8 pb-12">
+       <h1 className="text-[26px] font-bold">사용자</h1>
+       <Suspense fallback={<p className="mt-4 text-muted">불러오는 중…</p>}>
+         <Users />
+@@ -29,6 +32,10 @@ async function Users() {
+   const admin = await requireAdmin();
+   const db = getDb();
+   const now = new Date();
++  const limits = readUsageLimits();
++  const words = monthlyWordsByUser(db, now);
++  // 한국 시간 그 달 1일. 서버 시간대와 상관없이 "10월 1일"로 쓴다.
++  const since = `${Number(kstMonthRange(now).key.slice(5))}월 1일`;
+   const rows = listUsers(db).map((u) => ({
+     id: u.id,
+     name: u.name,
+@@ -36,11 +43,16 @@ async function Users() {
+     status: u.status,
+     role: u.role,
+     joined: formatJoinedAt(u.createdAt, now),
++    monthWords: words.get(u.id) ?? 0,
+   }));
+   return (
+     <>
+       <p className="mt-1 mb-5 text-sm text-muted tabular-nums">{summaryLine(countUsersByStatus(db))}</p>
+-      <UserTable rows={rows} selfId={admin.id} />
++      <UsageCost spentUsd={monthlySpendUsd(db, now)} budgetUsd={limits.monthlyBudgetUsd} since={since} />
++      <UserTable rows={rows} selfId={admin.id} wordLimit={limits.monthlyWords} />
++      <p className="mt-3 text-[12.5px] text-muted">
++        한도: 사용자당 월 {limits.monthlyWords.toLocaleString("ko-KR")}단어 · 전체 월 {usd(limits.monthlyBudgetUsd)}
++      </p>
+     </>
+   );
+ }
+diff --git a/src/app/(app)/admin/usage-cost.tsx b/src/app/(app)/admin/usage-cost.tsx
+new file mode 100644
+index 0000000..db56079
+--- /dev/null
++++ b/src/app/(app)/admin/usage-cost.tsx
+@@ -0,0 +1,39 @@
++// 관리 화면의 이번 달 Gemini 비용 칸(C 화면 규칙 5.2). 정산 전 요청은 예상 비용으로 들어 있다(한도 계산과 같은 값).
++export function UsageCost({ spentUsd, budgetUsd, since }: { spentUsd: number; budgetUsd: number; since: string }) {
++  const ratio = budgetUsd > 0 ? spentUsd / budgetUsd : 1;
++  const percent = Math.min(100, Math.floor(ratio * 100));
++  const full = ratio >= 1;
++  const fill = full ? "bg-again" : ratio >= 0.8 ? "bg-hard" : "bg-accent";
++  return (
++    <section className="mb-4 rounded-lg border border-line bg-surface px-[18px] py-3.5 shadow-1">
++      <div className="flex items-center gap-4">
++        <div className="shrink-0">
++          <div className="text-xs font-semibold text-muted">이번 달 Gemini 비용</div>
++          <div className="tabular-nums">
++            <span className="text-xl font-bold">{usd(spentUsd)}</span>
++            <span className="text-sm text-muted"> / {usd(budgetUsd)}</span>
++          </div>
++        </div>
++        <div
++          role="meter"
++          aria-label="이번 달 Gemini 비용"
++          aria-valuemin={0}
++          aria-valuemax={budgetUsd}
++          aria-valuenow={Number(spentUsd.toFixed(2))}
++          className="h-1 flex-1 overflow-hidden rounded-full bg-sunken"
++        >
++          <div className={`h-full ${fill}`} style={{ width: `${percent}%` }} />
++        </div>
++        <div className="shrink-0 text-xs text-muted tabular-nums">{full ? "상한 도달 · 뜻 만들기 멈춤" : `${percent}%`}</div>
++      </div>
++      <p className="mt-2 text-[12.5px] text-muted">
++        {since}부터 · 한국 시간. 매월 1일 0시에 새로 셉니다. 정산 중인 요청은 예상 비용으로 셉니다.
++      </p>
++    </section>
++  );
++}
++
++// 소수 둘째 자리까지, $0.005 미만은 $0.00(반올림).
++export function usd(value: number): string {
++  return `$${value.toFixed(2)}`;
++}
+diff --git a/src/app/(app)/admin/user-table.tsx b/src/app/(app)/admin/user-table.tsx
+index fba8068..f2a4681 100644
+--- a/src/app/(app)/admin/user-table.tsx
++++ b/src/app/(app)/admin/user-table.tsx
+@@ -14,13 +14,14 @@ export interface UserRowData {
+   status: UserStatus;
+   role: UserRole;
+   joined: string;
++  monthWords: number; // 이번 달(한국 시간) 뜻을 만든 단어 수
+ }
+ 
+ type NextStatus = "approved" | "blocked";
+ 
+ // 사용자 표(화면 규칙 6장). 처리한 뒤에도 행은 그 자리에 둔다: 처음 그려진 순서를 기억하고, 상태만 그 자리에서 바꾼다.
+ // 다음에 화면을 열 때 서버가 다시 정렬한다.
+-export function UserTable({ rows, selfId }: { rows: UserRowData[]; selfId: string }) {
++export function UserTable({ rows, selfId, wordLimit }: { rows: UserRowData[]; selfId: string; wordLimit: number }) {
+   const [initial] = useState(() => ({
+     order: rows.map((r) => r.id),
+     pendingCount: rows.filter((r) => r.status === "pending").length,
+@@ -81,9 +82,10 @@ export function UserTable({ rows, selfId }: { rows: UserRowData[]; selfId: strin
+         <thead>
+           <tr className="border-b border-line text-left text-xs font-semibold text-muted">
+             <th className="px-4 py-2.5 font-semibold">사용자</th>
+-            <th className="w-[150px] px-4 py-2.5 font-semibold">상태</th>
++            <th className="w-[130px] px-4 py-2.5 font-semibold">상태</th>
++            <th className="w-[130px] px-4 py-2.5 text-right font-semibold">이번 달 단어</th>
+             <th className="w-[120px] px-4 py-2.5 font-semibold">가입</th>
+-            <th className="px-4 py-2.5 text-right font-semibold">동작</th>
++            <th className="w-[150px] px-4 py-2.5 text-right font-semibold">동작</th>
+           </tr>
+         </thead>
+         <tbody>
+@@ -140,6 +142,9 @@ export function UserTable({ rows, selfId }: { rows: UserRowData[]; selfId: strin
+                       </div>
+                     )}
+                   </td>
++                  <td className="px-4 py-3 text-right text-sm whitespace-nowrap tabular-nums">
++                    <MonthWords value={user.monthWords} limit={wordLimit} />
++                  </td>
+                   <td className="px-4 py-3 text-[13px] whitespace-nowrap text-ink-2 tabular-nums">{user.joined}</td>
+                   <td className="px-4 py-3 text-right whitespace-nowrap">
+                     {!isSelf && (
+@@ -166,10 +171,23 @@ function FragmentRow({ divider, children }: { divider: boolean; children: React.
+     <>
+       {divider && (
+         <tr aria-hidden>
+-          <td colSpan={4} className="h-0 border-b-2 border-line-strong p-0" />
++          <td colSpan={5} className="h-0 border-b-2 border-line-strong p-0" />
+         </tr>
+       )}
+       {children}
+     </>
+   );
+ }
++
++// "이번 달 단어" 칸(C 화면 규칙 5.3). 한도에 닿았으면 hard 점과 "한도"를 붙인다.
++function MonthWords({ value, limit }: { value: number; limit: number }) {
++  const text = value.toLocaleString("ko-KR");
++  if (value === 0) return <span className="text-muted">0</span>;
++  if (value < limit) return <span>{text}</span>;
++  return (
++    <span className="inline-flex items-center gap-1.5">
++      <span aria-hidden className="size-[7px] rounded-full bg-hard" />
++      {text} <span className="text-[13px] text-ink-2">한도</span>
++    </span>
++  );
++}
+diff --git a/src/app/(app)/documents/[id]/actions.ts b/src/app/(app)/documents/[id]/actions.ts
+index e37ba03..1e71f10 100644
+--- a/src/app/(app)/documents/[id]/actions.ts
++++ b/src/app/(app)/documents/[id]/actions.ts
+@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
+ import { isId, parseIdList } from "@/lib/validate";
+ import { getDb } from "@/server/db/client";
+ import { deleteCard, listFailedMeaningIds, occurrencesBelongTo } from "@/server/repo/cards";
+-import { MISSING_KEY_MESSAGE } from "@/lib/regen-messages";
++import { LIMIT_SLOT, MISSING_KEY_MESSAGE } from "@/lib/regen-messages";
+ import { defaultMeaningModel, regenerateMeanings } from "@/server/services/enrich";
+ import { requireUser } from "@/server/auth/current-user";
+ 
+@@ -17,7 +17,10 @@ function refresh(documentId: number) {
+   revalidatePath("/");
+ }
+ 
+-export type RegenerateActionResult = { error: string } | { error: null; done: number; failed: number };
++// limitResetsOn이 있으면 한도에 걸린 것이다.
++export type RegenerateActionResult =
++  | { error: string; limitResetsOn?: string }
++  | { error: null; done: number; failed: number };
+ 
+ // 뜻 다시 만들기. occurrenceIds가 비어 있으면 이 문서의 실패한 뜻 전체("모두 다시 시도"),
+ // 있으면 그 용례들(이미 뜻이 있어도 새로 받는다. 실패하면 원래 뜻을 둔다).
+@@ -33,6 +36,7 @@ export async function regenerateDocumentMeanings(
+   const targets = ids.length > 0 ? ids : listFailedMeaningIds(db, user.id, documentId);
+   const result = await regenerateMeanings(db, user.id, targets, defaultMeaningModel());
+   if (result.error === "missing-key") return { error: MISSING_KEY_MESSAGE };
++  if (result.error === "usage-limit") return { error: LIMIT_SLOT, limitResetsOn: result.resetsOn };
+   refresh(documentId);
+   return result;
+ }
+diff --git a/src/app/(app)/documents/[id]/page.tsx b/src/app/(app)/documents/[id]/page.tsx
+index 3699068..beffeca 100644
+--- a/src/app/(app)/documents/[id]/page.tsx
++++ b/src/app/(app)/documents/[id]/page.tsx
+@@ -6,7 +6,7 @@ import { Notice } from "@/components/ui/notice";
+ import { getDb } from "@/server/db/client";
+ import { countOccurrencesByWord, listOccurrencesByDocument } from "@/server/repo/cards";
+ import { getDocument } from "@/server/repo/documents";
+-import { RetryAllButton } from "./retry-all-button";
++import { FailedMeaningsNotice } from "./retry-all-button";
+ import { WordTable } from "./word-table";
+ import { requireUser } from "@/server/auth/current-user";
+ 
+@@ -54,19 +54,7 @@ async function DocumentWords({ params }: { params: Promise<{ id: string }> }) {
+         </Notice>
+       )}
+       {doc.status === "error" && doc.errorMessage && <Notice className="mt-4">{doc.errorMessage}</Notice>}
+-      {failed > 0 && (
+-        <Notice className="mt-4">
+-          뜻 <span className="tabular-nums">{failed}</span>개를 만들지 못했습니다
+-          {missingKey ? (
+-            <>
+-              {" "}
+-              · GEMINI_API_KEY 없음. <span className="text-muted">.env.local에 키를 넣고 서버를 다시 시작하세요.</span>
+-            </>
+-          ) : (
+-            <RetryAllButton documentId={doc.id} />
+-          )}
+-        </Notice>
+-      )}
++      {failed > 0 && <FailedMeaningsNotice documentId={doc.id} failed={failed} missingKey={missingKey} />}
+ 
+       <WordTable documentId={doc.id} rows={rows.map((r) => ({ ...r, usageCount: usage.get(r.wordId) ?? 1 }))} />
+     </main>
+diff --git a/src/app/(app)/documents/[id]/retry-all-button.tsx b/src/app/(app)/documents/[id]/retry-all-button.tsx
+index e558278..7277710 100644
+--- a/src/app/(app)/documents/[id]/retry-all-button.tsx
++++ b/src/app/(app)/documents/[id]/retry-all-button.tsx
+@@ -1,38 +1,69 @@
+ "use client";
+ 
+ import { useState, useTransition } from "react";
+-import { Spinner } from "@/components/ui/status";
++import { Notice } from "@/components/ui/notice";
++import { Failed, Spinner } from "@/components/ui/status";
++import { LIMIT_REGEN } from "@/lib/regen-messages";
+ import { regenerateDocumentMeanings } from "./actions";
+ 
+-// 안내 줄의 "모두 다시 시도": 이 문서의 실패한 뜻을 한 번에 다시 만든다.
+-export function RetryAllButton({ documentId }: { documentId: number }) {
++type Outcome = { kind: "failed"; text: string } | { kind: "limit"; resetsOn: string };
++
++// 실패한 뜻 안내 줄과 "모두 다시 시도". 이 문서의 실패한 뜻을 한 번에 다시 만든다.
++// 한도에 걸리면 안내 줄 아래에 따로 Notice로 알린다(C 화면 규칙 4.2. 실패 표시가 아니다).
++export function FailedMeaningsNotice({
++  documentId,
++  failed,
++  missingKey,
++}: {
++  documentId: number;
++  failed: number;
++  missingKey: boolean;
++}) {
+   const [pending, startTransition] = useTransition();
+-  const [message, setMessage] = useState<string | null>(null);
++  const [outcome, setOutcome] = useState<Outcome | null>(null);
+ 
+   const retry = () =>
+     startTransition(async () => {
+-      setMessage(null);
++      setOutcome(null);
+       const result = await regenerateDocumentMeanings(documentId, []);
+-      if (result.error !== null) setMessage(result.error);
+-      else if (result.failed > 0) setMessage(`${result.done}개를 채웠고 ${result.failed}개는 다시 실패했습니다.`);
++      if (result.error !== null) {
++        setOutcome(
++          result.limitResetsOn ? { kind: "limit", resetsOn: result.limitResetsOn } : { kind: "failed", text: result.error },
++        );
++      } else if (result.failed > 0) {
++        setOutcome({ kind: "failed", text: `${result.done}개를 채웠고 ${result.failed}개는 다시 실패했습니다.` });
++      }
+     });
+ 
+   return (
+     <>
+-      <button
+-        type="button"
+-        onClick={retry}
+-        disabled={pending}
+-        className="ml-1.5 inline-flex items-center gap-1.5 font-semibold text-accent hover:underline disabled:opacity-55"
+-      >
+-        {pending && <Spinner />}
+-        {pending ? "다시 만드는 중…" : "모두 다시 시도"}
+-      </button>
+-      {message && (
+-        <span role="alert" className="ml-2 text-again">
+-          {message}
+-        </span>
+-      )}
++      <Notice className="mt-4">
++        뜻 <span className="tabular-nums">{failed}</span>개를 만들지 못했습니다
++        {missingKey ? (
++          <>
++            {" "}
++            · GEMINI_API_KEY 없음. <span className="text-muted">.env.local에 키를 넣고 서버를 다시 시작하세요.</span>
++          </>
++        ) : (
++          <>
++            <button
++              type="button"
++              onClick={retry}
++              disabled={pending}
++              className="ml-1.5 inline-flex items-center gap-1.5 font-semibold text-accent hover:underline disabled:opacity-55"
++            >
++              {pending && <Spinner />}
++              {pending ? "다시 만드는 중…" : "모두 다시 시도"}
++            </button>
++            {outcome?.kind === "failed" && (
++              <span role="alert" className="ml-2">
++                <Failed>{outcome.text}</Failed>
++              </span>
++            )}
++          </>
++        )}
++      </Notice>
++      {outcome?.kind === "limit" && <Notice className="mt-2">{LIMIT_REGEN(outcome.resetsOn)}</Notice>}
+     </>
+   );
+ }
+diff --git a/src/app/(app)/documents/[id]/review/actions.ts b/src/app/(app)/documents/[id]/review/actions.ts
+index 079790a..b4d1a68 100644
+--- a/src/app/(app)/documents/[id]/review/actions.ts
++++ b/src/app/(app)/documents/[id]/review/actions.ts
+@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
+ import { redirect } from "next/navigation";
+ import { isId, parseIdList } from "@/lib/validate";
+ import { getDb } from "@/server/db/client";
+-import { ReviewError, saveReviewSelection, type SavedCards } from "@/server/repo/cards";
+-import { defaultEnrichDeps, enrichDocument } from "@/server/services/enrich";
++import { defaultEnrichDeps } from "@/server/services/enrich";
++import { saveReviewAndEnrich } from "@/server/services/save-review";
+ import { requireUser } from "@/server/auth/current-user";
+ 
+ // 검토 결과를 저장하고, 뜻과 발음을 채운 뒤 문서 단어 목록으로 이동한다.
+@@ -14,20 +14,12 @@ import { requireUser } from "@/server/auth/current-user";
+ export async function saveReview(
+   documentId: unknown,
+   selectedCandidateIds: unknown,
+-): Promise<{ error: string }> {
++): Promise<{ error: string; limitResetsOn?: string }> {
+   const user = await requireUser();
+   const ids = parseIdList(selectedCandidateIds);
+   if (!isId(documentId) || ids === null) return { error: "잘못된 요청입니다." };
+-  const db = getDb();
+-  let saved: SavedCards;
+-  try {
+-    saved = saveReviewSelection(db, user.id, documentId, ids);
+-  } catch (err) {
+-    if (err instanceof ReviewError) return { error: err.message };
+-    throw err;
+-  }
+-
+-  await enrichDocument(db, user.id, documentId, saved, defaultEnrichDeps());
++  const result = await saveReviewAndEnrich(getDb(), user.id, documentId, ids, defaultEnrichDeps());
++  if (result.error !== null) return { error: result.error, limitResetsOn: result.limitResetsOn };
+   revalidatePath("/documents");
+   redirect(`/documents/${documentId}`);
+ }
+diff --git a/src/app/(app)/documents/[id]/review/candidate-table.tsx b/src/app/(app)/documents/[id]/review/candidate-table.tsx
+index a526238..bd2c35a 100644
+--- a/src/app/(app)/documents/[id]/review/candidate-table.tsx
++++ b/src/app/(app)/documents/[id]/review/candidate-table.tsx
+@@ -4,7 +4,9 @@ import { useEffect, useRef, useState, useTransition } from "react";
+ import { buttonClass } from "@/components/ui/button";
+ import { Highlighted } from "@/components/ui/highlighted";
+ import { Kbd } from "@/components/ui/kbd";
+-import { Status } from "@/components/ui/status";
++import { Notice } from "@/components/ui/notice";
++import { Failed, Status } from "@/components/ui/status";
++import { LIMIT_SAVE } from "@/lib/regen-messages";
+ import { Tag } from "@/components/ui/tag";
+ import { shortSentence } from "@/lib/text/truncate";
+ import {
+@@ -49,7 +51,7 @@ export function CandidateTable({
+   const [focus, setFocus] = useState(0);
+   const [anchor, setAnchor] = useState<number | null>(null);
+   const [saving, startSaving] = useTransition();
+-  const [error, setError] = useState<string | null>(null);
++  const [error, setError] = useState<{ text: string; limitResetsOn?: string } | null>(null);
+   const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
+ 
+   const visible = candidates.filter((c) => matchesFilter(c, filter, selected));
+@@ -76,9 +78,10 @@ export function CandidateTable({
+ 
+   const save = () => {
+     if (saving) return;
++    setError(null); // 다시 누르면 앞의 안내를 지운다(C 화면 규칙 4.1)
+     startSaving(async () => {
+       const result = await saveReview(documentId, [...selected]);
+-      if (result?.error) setError(result.error);
++      if (result?.error) setError({ text: result.error, limitResetsOn: result.limitResetsOn });
+     });
+   };
+ 
+@@ -177,9 +180,15 @@ export function CandidateTable({
+       </div>
+ 
+       {error && (
+-        <p role="alert" className="px-10 pt-3 text-sm text-again">
+-          {error}
+-        </p>
++        <div className="px-10 pt-3">
++          {error.limitResetsOn ? (
++            <Notice>{LIMIT_SAVE(error.limitResetsOn)}</Notice>
++          ) : (
++            <p role="alert" className="text-sm">
++              <Failed>{error.text}</Failed>
++            </p>
++          )}
++        </div>
+       )}
+ 
+       <div className={`overflow-x-auto px-7 max-[900px]:px-2 ${saving ? "pointer-events-none opacity-45" : ""}`} aria-busy={saving}>
+diff --git a/src/app/(app)/documents/[id]/word-table.tsx b/src/app/(app)/documents/[id]/word-table.tsx
+index 84cb358..8fa816a 100644
+--- a/src/app/(app)/documents/[id]/word-table.tsx
++++ b/src/app/(app)/documents/[id]/word-table.tsx
+@@ -5,7 +5,7 @@ import { buttonClass } from "@/components/ui/button";
+ import { Highlighted } from "@/components/ui/highlighted";
+ import { Kbd } from "@/components/ui/kbd";
+ import { RegenIdleButton, RegenSlot, type RegenState } from "@/components/ui/regen-slot";
+-import { REGEN_FAILED } from "@/lib/regen-messages";
++import { LIMIT_SLOT, REGEN_FAILED } from "@/lib/regen-messages";
+ import { Failed, Spinner } from "@/components/ui/status";
+ import { keepFocus } from "@/lib/ui/keys";
+ import type { OccurrenceView } from "@/server/repo/cards";
+@@ -72,7 +72,8 @@ export function WordTable({ documentId, rows }: { documentId: number; rows: Word
+     setRowRegen(row.id, { phase: "busy" });
+     regenerateDocumentMeanings(documentId, [row.id])
+       .then((result) => {
+-        if (result.error !== null) setRowRegen(row.id, { phase: "failed", text: result.error });
++        if (result.error !== null && result.limitResetsOn) setRowRegen(row.id, { phase: "limited", text: LIMIT_SLOT });
++        else if (result.error !== null) setRowRegen(row.id, { phase: "failed", text: result.error });
+         else if (result.failed > 0) setRowRegen(row.id, { phase: "failed", text: REGEN_FAILED });
+         else setRowRegen(row.id, { phase: "done" });
+       })
+@@ -126,7 +127,7 @@ export function WordTable({ documentId, rows }: { documentId: number; rows: Word
+                   )}
+                   {/* opacity-0: 자리는 늘 차지해 행 높이가 변하지 않고, invisible과 달리 Tab으로 닿는다(포커스가 들어오면 보인다). 상태가 있거나 삭제 확인 중이면 늘 보인다 */}
+                   <div
+-                    className={`mt-1.5 flex h-5 items-center text-[13px] ${
++                    className={`mt-1.5 flex min-h-5 items-center text-[13px] ${
+                       regen.has(r.id) || deleting?.id === r.id
+                         ? ""
+                         : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+diff --git a/src/app/(app)/study/study-session.tsx b/src/app/(app)/study/study-session.tsx
+index 6fde4b6..0f68e50 100644
+--- a/src/app/(app)/study/study-session.tsx
++++ b/src/app/(app)/study/study-session.tsx
+@@ -6,8 +6,8 @@ import { buttonClass } from "@/components/ui/button";
+ import { Highlighted } from "@/components/ui/highlighted";
+ import { Kbd } from "@/components/ui/kbd";
+ import { RegenIdleButton, RegenSlot, type RegenState } from "@/components/ui/regen-slot";
+-import { REGEN_FAILED } from "@/lib/regen-messages";
+-import { Failed, Spinner } from "@/components/ui/status";
++import { LIMIT_CARD, REGEN_FAILED } from "@/lib/regen-messages";
++import { Failed, Limited, Spinner } from "@/components/ui/status";
+ import { Tag } from "@/components/ui/tag";
+ import { formatInterval } from "@/lib/srs/interval";
+ import type { Answer } from "@/lib/srs/scheduler";
+@@ -133,13 +133,19 @@ function UsageBlock({
+           — <span className="font-en text-[13.5px] italic">{usage.documentTitle}</span>
+         </p>
+         <div className="flex h-5 shrink-0 items-center whitespace-nowrap">
+-          <RegenSlot
+-            state={regen}
+-            onRegenerate={onRegenerate}
+-            idle={<RegenIdleButton onRegenerate={onRegenerate} />}
+-          />
++          {regen?.phase !== "limited" && (
++            <RegenSlot
++              state={regen}
++              onRegenerate={onRegenerate}
++              idle={<RegenIdleButton onRegenerate={onRegenerate} />}
++            />
++          )}
+         </div>
+       </div>
++      {/* 한도 문구는 길어서 출처 아래 한 줄을 통째로 쓴다(C 화면 규칙 4.3) */}
++      <p aria-live="polite" className="mt-1 empty:hidden">
++        {regen?.phase === "limited" && <Limited className="text-[12.5px]">{regen.text}</Limited>}
++      </p>
+     </div>
+   );
+ }
+@@ -294,7 +300,11 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
+     requestRegeneration(occurrenceId)
+       .then((result) => {
+         if (result.error !== null) {
+-          finish({ phase: "failed", text: result.error });
++          finish(
++            result.limitResetsOn
++              ? { phase: "limited", text: LIMIT_CARD(result.limitResetsOn) }
++              : { phase: "failed", text: result.error },
++          );
+           return;
+         }
+         meaningsRef.current.set(occurrenceId, { meaningKo: result.meaningKo, meaningStatus: result.meaningStatus });
+diff --git a/src/components/ui/regen-slot.tsx b/src/components/ui/regen-slot.tsx
+index 815ea2e..1108c02 100644
+--- a/src/components/ui/regen-slot.tsx
++++ b/src/components/ui/regen-slot.tsx
+@@ -1,9 +1,14 @@
+ import { MISSING_KEY_MESSAGE } from "@/lib/regen-messages";
+ import { keepFocus } from "@/lib/ui/keys";
+-import { Spinner } from "./status";
++import { Limited, Spinner } from "./status";
+ 
+ // 뜻 다시 만들기의 진행·결과. 뜻은 제자리에 흐리게 두고(높이가 변하지 않게) 상태는 버튼 자리에 보인다.
+-export type RegenState = { phase: "busy" } | { phase: "done" } | { phase: "failed"; text: string };
++// limited: 이번 달 한도에 걸림(C-1). 다시 눌러도 같으므로 "다시 시도"를 두지 않는다.
++export type RegenState =
++  | { phase: "busy" }
++  | { phase: "done" }
++  | { phase: "failed"; text: string }
++  | { phase: "limited"; text: string };
+ 
+ // 평소에는 점선 밑줄, 마우스·키보드 포커스에서 강조색 실선 밑줄.
+ export const regenButtonClass =
+@@ -37,6 +42,8 @@ export function RegenSlot({
+         <span className="inline-flex items-center gap-1.5 text-muted">
+           <Spinner /> 다시 만드는 중
+         </span>
++      ) : state.phase === "limited" ? (
++        <Limited>{state.text}</Limited>
+       ) : state.phase === "done" ? (
+         <>
+           <span className="text-muted">새 뜻으로 바꿨습니다 ·</span>
+diff --git a/src/components/ui/status.tsx b/src/components/ui/status.tsx
+index 569b488..a7194e6 100644
+--- a/src/components/ui/status.tsx
++++ b/src/components/ui/status.tsx
+@@ -48,3 +48,14 @@ export function Failed({ children }: { children: React.ReactNode }) {
+     </span>
+   );
+ }
++
++// 이번 달 사용량 한도처럼 고장이 아닌 "못 하는" 상태: 짧은 hard 실선 + 회색 글자(C 화면 규칙 3장).
++// 글이 여러 줄이 되면 표시 줄은 첫 줄에 맞춘다.
++export function Limited({ children, className = "text-[13px]" }: { children: React.ReactNode; className?: string }) {
++  return (
++    <span className={`inline-flex items-baseline gap-1.5 whitespace-normal text-muted ${className}`}>
++      <span aria-hidden className="w-2.5 shrink-0 -translate-y-[3px] border-t-2 border-hard" />
++      <span>{children}</span>
++    </span>
++  );
++}
+diff --git a/src/instrumentation.ts b/src/instrumentation.ts
+new file mode 100644
+index 0000000..b164573
+--- /dev/null
++++ b/src/instrumentation.ts
+@@ -0,0 +1,12 @@
++import type { Instrumentation } from "next";
++
++// 처리하지 못한 서버 오류를 관리자에게 알린다(C-1). 같은 오류는 10분에 한 번만 보낸다.
++// redirect·notFound처럼 Next가 흐름 제어에 쓰는 예외(digest가 NEXT_로 시작)는 오류가 아니다.
++export const onRequestError: Instrumentation.onRequestError = async (err, request, context) => {
++  if (process.env.NEXT_RUNTIME !== "nodejs") return;
++  const digest = typeof err === "object" && err !== null && "digest" in err ? String(err.digest) : "";
++  if (digest.startsWith("NEXT_")) return;
++  const { notifyServerError } = await import("./server/alerts/notify");
++  // 주소의 검색어(?…)는 넣지 않는다.
++  await notifyServerError(`${request.method} ${request.path.split("?")[0]} · ${context.routeType}`, err);
++};
+diff --git a/src/lib/meaning/gemini.ts b/src/lib/meaning/gemini.ts
+index 2ac9ce3..55a633d 100644
+--- a/src/lib/meaning/gemini.ts
++++ b/src/lib/meaning/gemini.ts
+@@ -1,6 +1,6 @@
+ import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+ import { z } from 'zod';
+-import type { MeaningModel } from './generate';
++import type { MeaningModel, TokenUsage } from './generate';
+ 
+ export const MEANING_MODEL_ID = 'gemini-3.5-flash-lite';
+ 
+@@ -55,7 +55,7 @@ export class GarbledOutputError extends Error {
+ export function createGeminiMeaningModel(
+   client: GeminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }),
+ ): MeaningModel {
+-  return async (batch) => {
++  return async (batch, onUsage) => {
+     const response = await client.models.generateContent({
+       model: MEANING_MODEL_ID,
+       contents: JSON.stringify(batch.map((r) => ({ id: r.id, word: r.word, sentence: r.sentence }))),
+@@ -69,6 +69,7 @@ export function createGeminiMeaningModel(
+         maxOutputTokens: 16384,
+       },
+     });
++    onUsage?.(tokenUsage(response.usageMetadata));
+     const text = response.text;
+     if (!text) {
+       const reason = response.candidates?.[0]?.finishReason ?? 'unknown';
+@@ -82,3 +83,14 @@ export function createGeminiMeaningModel(
+     return meanings;
+   };
+ }
++
++// 응답의 usageMetadata를 과금 단위로 바꾼다. 사고 토큰은 출력 요금으로 매겨진다(2026-10-17 공식 요금표).
++// 값이 빠진 응답은 0으로 센다.
++export function tokenUsage(
++  meta: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } | undefined,
++): TokenUsage {
++  return {
++    inputTokens: meta?.promptTokenCount ?? 0,
++    outputTokens: (meta?.candidatesTokenCount ?? 0) + (meta?.thoughtsTokenCount ?? 0),
++  };
++}
+diff --git a/src/lib/meaning/generate.ts b/src/lib/meaning/generate.ts
+index 6b78941..2f4031e 100644
+--- a/src/lib/meaning/generate.ts
++++ b/src/lib/meaning/generate.ts
+@@ -11,8 +11,15 @@ export interface MeaningResult {
+   meaningKo: string;
+ }
+ 
++// 모델 응답 하나가 쓴 토큰. 출력에는 사고 토큰이 들어간다(과금 기준과 같다).
++export interface TokenUsage {
++  inputTokens: number;
++  outputTokens: number;
++}
++
+ // 단어 묶음 하나를 받아 문맥 뜻을 돌려주는 모델. 실제 구현은 gemini.ts, 테스트는 가짜를 쓴다.
+-export type MeaningModel = (batch: MeaningRequest[]) => Promise<MeaningResult[]>;
++// onUsage: 응답을 받을 때마다(형식이 틀려 예외로 끝나는 응답도) 쓴 토큰을 알린다. 비용 기록(C-1)이 쓴다.
++export type MeaningModel = (batch: MeaningRequest[], onUsage?: (usage: TokenUsage) => void) => Promise<MeaningResult[]>;
+ 
+ // 2026-10-16 실측(M4-4): 200개 묶음보다 50개 묶음이 문맥 오답이 적었다. 묶음은 동시에 보내
+ // 논문 한 편(후보 약 200개, 묶음 4~5개)이 한 번에 나간다. 큰 문서는 5개씩 나눠 보낸다.
+@@ -50,6 +57,8 @@ export interface RetryOptions {
+   sleep?: (ms: number) => Promise<void>;
+   random?: () => number;
+   isRetryable?: (err: unknown) => boolean;
++  // 재시도를 포함한 모든 모델 응답의 토큰을 받는다.
++  onUsage?: (usage: TokenUsage) => void;
+ }
+ 
+ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+@@ -58,11 +67,11 @@ async function requestWithRetry(
+   batch: MeaningRequest[],
+   batchNo: number,
+   model: MeaningModel,
+-  { sleep = wait, random = Math.random, isRetryable = isRetryableError }: RetryOptions,
++  { sleep = wait, random = Math.random, isRetryable = isRetryableError, onUsage }: RetryOptions,
+ ): Promise<MeaningResult[]> {
+   for (let attempt = 0; ; attempt++) {
+     try {
+-      return await model(batch);
++      return await model(batch, onUsage);
+     } catch (err) {
+       const { name, garbledCount } = err as { name?: unknown; garbledCount?: unknown };
+       if (name === GARBLED_OUTPUT_ERROR) {
+diff --git a/src/lib/regen-messages.ts b/src/lib/regen-messages.ts
+index a7860fc..ac384cb 100644
+--- a/src/lib/regen-messages.ts
++++ b/src/lib/regen-messages.ts
+@@ -3,3 +3,13 @@
+ // 키를 넣는 방법은 홈 화면 안내가 자세히 알려 준다.
+ export const REGEN_FAILED = '다시 만들지 못했습니다';
+ export const MISSING_KEY_MESSAGE = 'API 키가 없어 만들 수 없습니다';
++
++// 이번 달 한도(개인 또는 전체)에 걸렸을 때(C-1 화면 규칙 2장). resetsOn은 서버가 돌려주는 "11월 1일" 같은 날짜다.
++// 개인 한도와 전체 상한을 구분하지 않는다.
++export const LIMIT_SAVE = (resetsOn: string) =>
++  `이번 달 사용량을 다 써서 저장하지 않았습니다. 고른 단어는 그대로 있습니다. ${resetsOn}부터 저장할 수 있고, 더 필요하면 관리자에게 문의해 주세요.`;
++export const LIMIT_REGEN = (resetsOn: string) =>
++  `이번 달 사용량을 다 써서 뜻을 다시 만들지 못했습니다. 원래 뜻은 그대로입니다. ${resetsOn}부터 다시 만들 수 있고, 더 필요하면 관리자에게 문의해 주세요.`;
++export const LIMIT_CARD = (resetsOn: string) =>
++  `이번 달 사용량을 다 써서 뜻을 만들 수 없습니다. ${resetsOn}부터 다시 만들 수 있고, 더 필요하면 관리자에게 문의해 주세요.`;
++export const LIMIT_SLOT = '이번 달 사용량을 다 썼습니다 · 관리자에게 문의해 주세요';
+diff --git a/src/lib/usage/limits.ts b/src/lib/usage/limits.ts
+new file mode 100644
+index 0000000..ebde026
+--- /dev/null
++++ b/src/lib/usage/limits.ts
+@@ -0,0 +1,55 @@
++import type { TokenUsage } from '@/lib/meaning/generate';
++
++// Gemini 3.5 Flash-Lite 표준 유료 요금(100만 토큰당 USD). 2026-10-17 공식 요금표
++// (ai.google.dev/gemini-api/docs/pricing)에서 확인했다. 출력에는 사고 토큰이 들어간다.
++export const INPUT_USD_PER_MTOK = 0.3;
++export const OUTPUT_USD_PER_MTOK = 2.5;
++
++// 맡아 둘 때 쓰는 단어당 예상 비용. M4-4 실측(논문 1편 211단어: 입력 약 11,500, 출력 약 4,000토큰)으로는
++// 약 $0.000064라 넉넉히 잡는다. 끝나면 실제 비용으로 바뀐다.
++export const ESTIMATED_USD_PER_WORD = 0.0001;
++
++export const DEFAULT_MONTHLY_WORD_LIMIT = 4000;
++export const DEFAULT_MONTHLY_BUDGET_USD = 5;
++
++export interface UsageLimits {
++  monthlyWords: number;
++  monthlyBudgetUsd: number;
++}
++
++// MONTHLY_WORD_LIMIT, GEMINI_MONTHLY_BUDGET_USD를 읽는다. 비었거나 숫자가 아니거나 음수면 기본값이다.
++export function readUsageLimits(env: Readonly<Record<string, string | undefined>> = process.env): UsageLimits {
++  const read = (raw: string | undefined, fallback: number) => {
++    if (raw === undefined || raw.trim() === '') return fallback;
++    const n = Number(raw);
++    return Number.isFinite(n) && n >= 0 ? n : fallback;
++  };
++  return {
++    monthlyWords: Math.floor(read(env.MONTHLY_WORD_LIMIT, DEFAULT_MONTHLY_WORD_LIMIT)),
++    monthlyBudgetUsd: read(env.GEMINI_MONTHLY_BUDGET_USD, DEFAULT_MONTHLY_BUDGET_USD),
++  };
++}
++
++export function costUsd(usage: TokenUsage): number {
++  return (usage.inputTokens * INPUT_USD_PER_MTOK + usage.outputTokens * OUTPUT_USD_PER_MTOK) / 1_000_000;
++}
++
++const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
++
++// 한국 시간 기준 그 달의 1일 0시(UTC 시각으로)와 다음 달 1일 0시. 한국은 서머타임이 없다.
++export function kstMonthRange(now: Date): { start: Date; end: Date; key: string } {
++  const kst = new Date(now.getTime() + KST_OFFSET_MS);
++  const y = kst.getUTCFullYear();
++  const m = kst.getUTCMonth();
++  return {
++    start: new Date(Date.UTC(y, m, 1) - KST_OFFSET_MS),
++    end: new Date(Date.UTC(y, m + 1, 1) - KST_OFFSET_MS),
++    key: `${y}-${String(m + 1).padStart(2, '0')}`,
++  };
++}
++
++// 한도가 다시 채워지는 날(한국 시간 다음 달 1일)을 화면 문구용으로. 예: "11월 1일". 연도는 붙이지 않는다.
++export function resetsOnLabel(now: Date): string {
++  const kstEnd = new Date(kstMonthRange(now).end.getTime() + KST_OFFSET_MS);
++  return `${kstEnd.getUTCMonth() + 1}월 1일`;
++}
+diff --git a/src/server/alerts/notify.ts b/src/server/alerts/notify.ts
+new file mode 100644
+index 0000000..22e5373
+--- /dev/null
++++ b/src/server/alerts/notify.ts
+@@ -0,0 +1,70 @@
++// 관리자 알림(C-1). ALERT_WEBHOOK_URL이 Discord·Slack 웹훅이면 거기로 보내고, 없으면 서버 로그에만 남긴다.
++// 알림에는 문서 문장·뜻·비밀값·세션 정보를 넣지 않는다. 보내기에 실패해도 앱 동작은 막지 않는다.
++
++const SEND_TIMEOUT_MS = 5000;
++
++// 웹훅 주소에 맞는 본문. 알 수 없는 주소는 null(보내지 않는다).
++export function webhookBody(url: string, text: string): object | null {
++  let host: string;
++  try {
++    const u = new URL(url);
++    if (u.protocol !== 'https:') return null;
++    host = u.hostname;
++  } catch {
++    return null;
++  }
++  if (host === 'discord.com' || host === 'discordapp.com') return { content: text };
++  if (host === 'hooks.slack.com') return { text };
++  return null;
++}
++
++export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
++
++export async function notify(
++  text: string,
++  env: Readonly<Record<string, string | undefined>> = process.env,
++  fetcher: Fetcher = fetch,
++): Promise<void> {
++  console.warn(`[알림] ${text}`);
++  const url = env.ALERT_WEBHOOK_URL;
++  if (!url) return;
++  const body = webhookBody(url, text);
++  if (!body) {
++    console.error('알림 주소가 Discord·Slack 웹훅이 아니라 보내지 않았습니다.');
++    return;
++  }
++  try {
++    const res = await fetcher(url, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify(body),
++      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
++    });
++    if (!res.ok) console.error(`알림을 보내지 못했습니다: ${res.status}`);
++  } catch (err) {
++    console.error('알림을 보내지 못했습니다', err instanceof Error ? err.name : err);
++  }
++}
++
++// 같은 key는 windowMs 안에 한 번만 보낸다(서버 오류용). 메모리에 두므로 서버가 다시 시작하면 처음부터 센다.
++const lastSent = new Map<string, number>();
++export const ERROR_ALERT_WINDOW_MS = 10 * 60 * 1000;
++
++export function shouldSendThrottled(key: string, now: number, windowMs = ERROR_ALERT_WINDOW_MS): boolean {
++  const last = lastSent.get(key);
++  if (last !== undefined && now - last < windowMs) return false;
++  lastSent.set(key, now);
++  return true;
++}
++
++export function resetThrottleForTest(): void {
++  lastSent.clear();
++}
++
++// 서버 오류 알림. 같은 오류(장소+메시지)는 10분에 한 번.
++export async function notifyServerError(where: string, err: unknown): Promise<void> {
++  const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
++  const short = message.slice(0, 300);
++  if (!shouldSendThrottled(`${where}|${short}`, Date.now())) return;
++  await notify(`서버 오류 (${where})\n${short}`);
++}
+diff --git a/src/server/auth/auth.ts b/src/server/auth/auth.ts
+index 35360f9..dfd3d5f 100644
+--- a/src/server/auth/auth.ts
++++ b/src/server/auth/auth.ts
+@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth';
+ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+ import { nextCookies } from 'better-auth/next-js';
+ import { devLoginEnabled, initialAccess, parseAdminEmails } from '@/lib/auth/policy';
++import { notify } from '../alerts/notify';
+ import { getDb, type Db } from '../db/client';
+ import * as schema from '../db/schema';
+ 
+@@ -33,6 +34,11 @@ export function createAuth(db: Db, env: AuthEnv = process.env) {
+       user: {
+         create: {
+           before: async (user) => ({ data: { ...user, ...initialAccess(user.email, admins) } }),
++          // 승인 대기로 들어온 가입을 관리자에게 알린다(C-1). 알림을 못 보내도 가입은 그대로 된다.
++          after: async (user) => {
++            if ((user as { status?: unknown }).status !== 'pending') return;
++            void notify(`가입 신청: ${user.name} (${user.email})\n${adminUrl(env)}`, env);
++          },
+         },
+       },
+     },
+@@ -40,6 +46,11 @@ export function createAuth(db: Db, env: AuthEnv = process.env) {
+   });
+ }
+ 
++// 알림에 넣는 관리 화면 주소.
++function adminUrl(env: AuthEnv): string {
++  return new URL('/admin', env.BETTER_AUTH_URL ?? 'http://localhost').toString();
++}
++
+ export type Auth = ReturnType<typeof createAuth>;
+ 
+ const globalForAuth = globalThis as { slaveVocaAuth?: Auth };
+diff --git a/src/server/db/schema.ts b/src/server/db/schema.ts
+index 78e3fe3..2f5cbee 100644
+--- a/src/server/db/schema.ts
++++ b/src/server/db/schema.ts
+@@ -145,6 +145,37 @@ export const settings = sqliteTable(
+   (t) => [primaryKey({ columns: [t.userId, t.key] })],
+ );
+ 
++export const USAGE_SOURCES = ["save", "regenerate", "card"] as const;
++export type UsageSource = (typeof USAGE_SOURCES)[number];
++
++// 뜻 만들기 요청 한 번(검토 저장, 문서의 다시 만들기, 카드의 다시 만들기)마다 한 줄(C-1).
++// 개인 한도는 words로, 전체 상한은 cost_usd로 센다. 요청 전에 예상 비용으로 맡아 두고(settled=false),
++// 끝나면 실제 토큰과 비용으로 바꾼다. 사용자를 지워도 비용은 남겨 이번 달 지출이 줄지 않게 한다.
++export const meaningUsage = sqliteTable(
++  "meaning_usage",
++  {
++    id: integer("id").primaryKey({ autoIncrement: true }),
++    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
++    source: text("source", { enum: USAGE_SOURCES }).notNull(),
++    words: integer("words").notNull(),
++    inputTokens: integer("input_tokens").notNull().default(0),
++    outputTokens: integer("output_tokens").notNull().default(0),
++    costUsd: real("cost_usd").notNull(),
++    settled: integer("settled", { mode: "boolean" }).notNull().default(false),
++    createdAt: createdAt(),
++  },
++  (t) => [
++    index("meaning_usage_created_at_idx").on(t.createdAt),
++    index("meaning_usage_user_id_created_at_idx").on(t.userId, t.createdAt),
++  ],
++);
++
++// 한 번만 보내는 알림의 기록(예: "budget-80:2026-10"). 서버가 다시 시작해도 다시 보내지 않게 DB에 둔다.
++export const alertLog = sqliteTable("alert_log", {
++  key: text("key").primaryKey(),
++  createdAt: createdAt(),
++});
++
+ export type DocumentRow = typeof documents.$inferSelect;
+ export type CandidateRow = typeof candidates.$inferSelect;
+ export type WordRow = typeof words.$inferSelect;
+diff --git a/src/server/repo/usage.ts b/src/server/repo/usage.ts
+new file mode 100644
+index 0000000..946ee84
+--- /dev/null
++++ b/src/server/repo/usage.ts
+@@ -0,0 +1,80 @@
++import { and, eq, gte, lt, sql } from 'drizzle-orm';
++import type { TokenUsage } from '@/lib/meaning/generate';
++import { costUsd, ESTIMATED_USD_PER_WORD, kstMonthRange, type UsageLimits } from '@/lib/usage/limits';
++import type { Db } from '../db/client';
++import { alertLog, meaningUsage, type UsageSource } from '../db/schema';
++
++export type ReserveResult = { ok: true; id: number } | { ok: false; reason: 'user-limit' | 'budget' };
++
++function monthFilter(now: Date) {
++  const { start, end } = kstMonthRange(now);
++  return and(gte(meaningUsage.createdAt, start), lt(meaningUsage.createdAt, end));
++}
++
++// 이번 달(한국 시간) 사용자가 요청한 단어 수.
++export function monthlyWordsOf(db: Db, userId: string, now: Date): number {
++  const row = db
++    .select({ n: sql<number>`coalesce(sum(${meaningUsage.words}), 0)` })
++    .from(meaningUsage)
++    .where(and(eq(meaningUsage.userId, userId), monthFilter(now)))
++    .get();
++  return row?.n ?? 0;
++}
++
++// 이번 달 전체 비용. 끝나지 않은 요청은 예상 비용으로 들어 있다.
++export function monthlySpendUsd(db: Db, now: Date): number {
++  const row = db
++    .select({ usd: sql<number>`coalesce(sum(${meaningUsage.costUsd}), 0)` })
++    .from(meaningUsage)
++    .where(monthFilter(now))
++    .get();
++  return row?.usd ?? 0;
++}
++
++// 관리 화면용: 이번 달 사용자별 단어 수. 지워진 사용자(user_id NULL)는 빠진다.
++export function monthlyWordsByUser(db: Db, now: Date): Map<string, number> {
++  const rows = db
++    .select({ userId: meaningUsage.userId, n: sql<number>`sum(${meaningUsage.words})` })
++    .from(meaningUsage)
++    .where(monthFilter(now))
++    .groupBy(meaningUsage.userId)
++    .all();
++  return new Map(rows.filter((r) => r.userId !== null).map((r) => [r.userId as string, r.n]));
++}
++
++// 한도를 확인하고, 통과하면 예상 비용으로 한 줄을 맡아 둔다. 확인과 기록이 한 트랜잭션이라
++// 동시에 들어온 다른 요청은 이 줄까지 센 뒤에 판단한다.
++export function reserveUsage(
++  db: Db,
++  userId: string,
++  source: UsageSource,
++  words: number,
++  now: Date,
++  limits: UsageLimits,
++): ReserveResult {
++  return db.transaction(() => {
++    if (monthlyWordsOf(db, userId, now) + words > limits.monthlyWords) return { ok: false, reason: 'user-limit' };
++    if (monthlySpendUsd(db, now) + words * ESTIMATED_USD_PER_WORD > limits.monthlyBudgetUsd) {
++      return { ok: false, reason: 'budget' };
++    }
++    const row = db
++      .insert(meaningUsage)
++      .values({ userId, source, words, costUsd: words * ESTIMATED_USD_PER_WORD, createdAt: now })
++      .returning({ id: meaningUsage.id })
++      .get();
++    return { ok: true, id: row.id };
++  });
++}
++
++// 맡아 둔 줄을 실제 토큰과 비용으로 바꾼다.
++export function settleUsage(db: Db, id: number, usage: TokenUsage): void {
++  db.update(meaningUsage)
++    .set({ inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: costUsd(usage), settled: true })
++    .where(eq(meaningUsage.id, id))
++    .run();
++}
++
++// key로 처음 부르면 true, 그 뒤로는 false. "한 달에 한 번" 알림에 쓴다.
++export function claimAlert(db: Db, key: string): boolean {
++  return db.insert(alertLog).values({ key }).onConflictDoNothing().run().changes > 0;
++}
+diff --git a/src/server/services/enrich.ts b/src/server/services/enrich.ts
+index b076b88..02aa311 100644
+--- a/src/server/services/enrich.ts
++++ b/src/server/services/enrich.ts
+@@ -11,9 +11,12 @@ import {
+   markPendingMeaningsFailed,
+   setMeanings,
+   setPhonetic,
++  type MeaningRequestRow,
+   type SavedCards,
+ } from '../repo/cards';
+ import { updateDocumentStatus } from '../repo/documents';
++import { notifyServerError } from '../alerts/notify';
++import { reportUsageLimit, reserveMeaningUsage, UsageLimitError, type UsageMeter } from './meaning-usage';
+ 
+ const PHONETIC_CONCURRENCY = 5;
+ 
+@@ -38,12 +41,13 @@ export function defaultEnrichDeps(): EnrichDeps {
+ 
+ // 용례들의 뜻을 만들어 저장한다. 성공은 done, 실패는 failed. 저장 직후 채우기와 다시 만들기가 함께 쓴다.
+ // 이미 뜻이 있던 용례(done)는 새로 만들다 실패해도 원래 뜻을 그대로 둔다.
+-async function generateAndStore(db: Db, userId: string, occurrenceIds: readonly number[], model: MeaningModel) {
+-  const rows = listMeaningRequests(db, userId, occurrenceIds);
++// meter가 있으면 모델 응답의 토큰을 거기에 모은다(정산은 부른 쪽이 한다).
++async function generateAndStore(db: Db, rows: MeaningRequestRow[], model: MeaningModel, meter: UsageMeter | null) {
+   const hadMeaning = new Set(rows.filter((r) => r.meaningStatus === 'done').map((r) => r.id));
+   const outcome = await generateMeanings(
+     rows.map((r) => ({ id: r.id, word: r.lemma, sentence: r.sentence })),
+     model,
++    { onUsage: meter?.onUsage },
+   );
+   setMeanings(db, outcome.done);
+   // 이미 뜻이 있던 용례는 그대로 두고, 그 사이 다른 요청이 done으로 만든 용례도 failed로 덮지 않는다.
+@@ -51,28 +55,57 @@ async function generateAndStore(db: Db, userId: string, occurrenceIds: readonly
+   return { done: outcome.done.length, failed: outcome.failedIds.length };
+ }
+ 
+-async function fillMeanings(db: Db, userId: string, occurrenceIds: number[], model: MeaningModel | null) {
++async function fillMeanings(
++  db: Db,
++  userId: string,
++  occurrenceIds: number[],
++  model: MeaningModel | null,
++  meter: UsageMeter | null,
++) {
++  const rows = listMeaningRequests(db, userId, occurrenceIds);
+   if (!model) {
+-    markMeaningsFailed(db, listMeaningRequests(db, userId, occurrenceIds).map((r) => r.id));
++    markMeaningsFailed(db, rows.map((r) => r.id));
+     return;
+   }
+-  await generateAndStore(db, userId, occurrenceIds, model);
++  try {
++    await generateAndStore(db, rows, model, meter);
++  } finally {
++    meter?.finish();
++  }
+ }
+ 
+-export type RegenerateResult = { error: 'missing-key' } | { error: null; done: number; failed: number };
++export type RegenerateResult =
++  | { error: 'missing-key' }
++  | { error: 'usage-limit'; resetsOn: string }
++  | { error: null; done: number; failed: number };
+ 
+ // 뜻 다시 만들기: 실패한 뜻을 채우거나, 이상한 뜻을 새로 받는다(단어 하나 또는 여러 개).
+ // 키가 없으면 아무것도 바꾸지 않고 알린다.
+ // 그 사용자의 용례만 다시 만든다(남의 id는 listMeaningRequests에서 빠진다).
++// 한도에 걸리면 아무것도 바꾸지 않고 usage-limit을 돌려준다(C-1).
+ export async function regenerateMeanings(
+   db: Db,
+   userId: string,
+   occurrenceIds: readonly number[],
+   model: MeaningModel | null,
++  source: 'regenerate' | 'card' = 'regenerate',
+ ): Promise<RegenerateResult> {
+   if (!model) return { error: 'missing-key' };
+-  if (occurrenceIds.length === 0) return { error: null, done: 0, failed: 0 };
+-  return { error: null, ...(await generateAndStore(db, userId, occurrenceIds, model)) };
++  const rows = listMeaningRequests(db, userId, occurrenceIds);
++  if (rows.length === 0) return { error: null, done: 0, failed: 0 };
++  let meter: UsageMeter;
++  try {
++    meter = reserveMeaningUsage(db, userId, source, rows.length);
++  } catch (err) {
++    if (!(err instanceof UsageLimitError)) throw err;
++    reportUsageLimit(db, userId, err);
++    return { error: 'usage-limit', resetsOn: err.resetsOn };
++  }
++  try {
++    return { error: null, ...(await generateAndStore(db, rows, model, meter)) };
++  } finally {
++    meter.finish();
++  }
+ }
+ 
+ async function fillPhonetics(db: Db, wordIds: number[], lookup: EnrichDeps['lookupPhonetic']) {
+@@ -93,9 +126,10 @@ export async function enrichDocument(
+   documentId: number,
+   saved: SavedCards,
+   deps: EnrichDeps,
++  meter: UsageMeter | null = null,
+ ): Promise<void> {
+   const results = await Promise.allSettled([
+-    fillMeanings(db, userId, saved.occurrenceIds, deps.meaningModel),
++    fillMeanings(db, userId, saved.occurrenceIds, deps.meaningModel, meter),
+     fillPhonetics(db, saved.wordIds, deps.lookupPhonetic),
+   ]);
+   const failures = results.filter((r) => r.status === 'rejected');
+@@ -103,7 +137,10 @@ export async function enrichDocument(
+     updateDocumentStatus(db, documentId, 'done');
+     return;
+   }
+-  for (const f of failures) console.error('뜻·발음 채우기 실패', f.reason);
++  for (const f of failures) {
++    console.error('뜻·발음 채우기 실패', f.reason);
++    void notifyServerError('뜻·발음 채우기', f.reason);
++  }
+   markPendingMeaningsFailed(db, saved.occurrenceIds);
+   updateDocumentStatus(db, documentId, 'error', ENRICH_FAILED_MESSAGE);
+ }
+diff --git a/src/server/services/meaning-usage.ts b/src/server/services/meaning-usage.ts
+new file mode 100644
+index 0000000..a8851ac
+--- /dev/null
++++ b/src/server/services/meaning-usage.ts
+@@ -0,0 +1,86 @@
++import { eq } from 'drizzle-orm';
++import type { TokenUsage } from '@/lib/meaning/generate';
++import { LIMIT_SLOT } from '@/lib/regen-messages';
++import { kstMonthRange, readUsageLimits, resetsOnLabel, type UsageLimits } from '@/lib/usage/limits';
++import { notify } from '../alerts/notify';
++import type { Db } from '../db/client';
++import { users, type UsageSource } from '../db/schema';
++import { claimAlert, monthlySpendUsd, reserveUsage, settleUsage } from '../repo/usage';
++
++// 개인 한도 또는 전체 상한에 걸려 뜻을 만들지 않았다. 사용자에게는 둘을 구분하지 않고 알린다.
++// resetsOn: 다시 쓸 수 있는 날("11월 1일").
++export class UsageLimitError extends Error {
++  constructor(
++    readonly reason: 'user-limit' | 'budget',
++    readonly resetsOn: string,
++  ) {
++    super(LIMIT_SLOT);
++    this.name = 'UsageLimitError';
++  }
++}
++
++// 맡아 둔 요청 하나. onUsage로 토큰을 모으고 finish로 실제 비용을 기록한다.
++export interface UsageMeter {
++  onUsage: (usage: TokenUsage) => void;
++  finish: () => void;
++}
++
++export interface UsageContext {
++  now?: Date;
++  limits?: UsageLimits;
++}
++
++// 한도를 확인하고 맡아 둔다. 걸리면 UsageLimitError를 던진다(아무것도 기록하지 않는다).
++// 트랜잭션 안에서 불러도 된다: 바깥 트랜잭션이 되돌려지면 맡아 둔 줄도 함께 사라진다.
++export function reserveMeaningUsage(
++  db: Db,
++  userId: string,
++  source: UsageSource,
++  words: number,
++  { now = new Date(), limits = readUsageLimits() }: UsageContext = {},
++): UsageMeter {
++  const result = reserveUsage(db, userId, source, words, now, limits);
++  if (!result.ok) throw new UsageLimitError(result.reason, resetsOnLabel(now));
++  const total: TokenUsage = { inputTokens: 0, outputTokens: 0 };
++  let finished = false;
++  return {
++    onUsage: (u) => {
++      total.inputTokens += u.inputTokens;
++      total.outputTokens += u.outputTokens;
++    },
++    finish: () => {
++      if (finished) return;
++      finished = true;
++      settleUsage(db, result.id, total);
++      alertBudgetThresholds(db, now, limits);
++    },
++  };
++}
++
++const BUDGET_THRESHOLDS = [0.8, 1] as const;
++
++// 이번 달 비용이 상한의 80%, 100%에 닿으면 각각 한 달에 한 번 알린다.
++function alertBudgetThresholds(db: Db, now: Date, limits: UsageLimits) {
++  const spent = monthlySpendUsd(db, now);
++  const { key } = kstMonthRange(now);
++  for (const t of BUDGET_THRESHOLDS) {
++    if (spent >= limits.monthlyBudgetUsd * t && claimAlert(db, `budget-${t * 100}:${key}`)) {
++      void notify(`Gemini 이번 달 비용이 상한의 ${t * 100}%에 닿았습니다: $${spent.toFixed(2)} / $${limits.monthlyBudgetUsd.toFixed(2)}`);
++    }
++  }
++}
++
++// 한도에 걸렸을 때 관리자에게 알린다. 개인 한도는 사용자마다 한 달에 한 번, 전체 상한은 한 달에 한 번.
++// 트랜잭션 밖에서 부른다(되돌려지면 "보냈음" 기록도 사라지므로).
++export function reportUsageLimit(db: Db, userId: string, err: UsageLimitError, { now = new Date(), limits = readUsageLimits() }: UsageContext = {}) {
++  const { key } = kstMonthRange(now);
++  if (err.reason === 'budget') {
++    if (claimAlert(db, `budget-blocked:${key}`)) {
++      void notify(`Gemini 이번 달 상한($${limits.monthlyBudgetUsd.toFixed(2)})에 닿아 뜻 만들기를 막았습니다.`);
++    }
++    return;
++  }
++  if (!claimAlert(db, `user-limit:${userId}:${key}`)) return;
++  const user = db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, userId)).get();
++  void notify(`${user?.name ?? userId} (${user?.email ?? '-'}) 님이 이번 달 한도(${limits.monthlyWords}단어)에 닿았습니다.`);
++}
+diff --git a/src/server/services/save-review.ts b/src/server/services/save-review.ts
+new file mode 100644
+index 0000000..f5d7da4
+--- /dev/null
++++ b/src/server/services/save-review.ts
+@@ -0,0 +1,38 @@
++import type { Db } from '../db/client';
++import { ReviewError, saveReviewSelection } from '../repo/cards';
++import { enrichDocument, type EnrichDeps } from './enrich';
++import { reportUsageLimit, reserveMeaningUsage, UsageLimitError, type UsageMeter } from './meaning-usage';
++
++// limitResetsOn이 있으면 한도에 걸린 것이다(화면이 다른 실패와 구별해 보인다).
++export type SaveReviewResult = { error: string | null; limitResetsOn?: string };
++
++// 검토 저장(C-1): 카드 저장과 사용량 맡아 두기를 한 트랜잭션에서 한다. 한도에 걸리면 저장도 되돌려
++// 카드·용례·아는 단어가 하나도 바뀌지 않는다. 키가 없으면(뜻을 만들지 않으므로) 한도를 보지 않는다.
++export async function saveReviewAndEnrich(
++  db: Db,
++  userId: string,
++  documentId: number,
++  selectedCandidateIds: readonly number[],
++  deps: EnrichDeps,
++): Promise<SaveReviewResult> {
++  let saved;
++  let meter: UsageMeter | null = null;
++  try {
++    saved = db.transaction(() => {
++      const s = saveReviewSelection(db, userId, documentId, selectedCandidateIds);
++      if (deps.meaningModel && s.occurrenceIds.length > 0) {
++        meter = reserveMeaningUsage(db, userId, 'save', s.occurrenceIds.length);
++      }
++      return s;
++    });
++  } catch (err) {
++    if (err instanceof ReviewError) return { error: err.message };
++    if (err instanceof UsageLimitError) {
++      reportUsageLimit(db, userId, err);
++      return { error: err.message, limitResetsOn: err.resetsOn };
++    }
++    throw err;
++  }
++  await enrichDocument(db, userId, documentId, saved, deps, meter);
++  return { error: null };
++}
+diff --git a/src/server/services/usage-meaning.ts b/src/server/services/usage-meaning.ts
+index 6793b9b..3265095 100644
+--- a/src/server/services/usage-meaning.ts
++++ b/src/server/services/usage-meaning.ts
+@@ -1,12 +1,13 @@
+-import { MISSING_KEY_MESSAGE } from '@/lib/regen-messages';
++import { LIMIT_SLOT, MISSING_KEY_MESSAGE } from '@/lib/regen-messages';
+ import type { MeaningModel } from '@/lib/meaning/generate';
+ import { isId } from '@/lib/validate';
+ import type { Db } from '../db/client';
+ import { getOccurrenceMeaning } from '../repo/cards';
+ import { regenerateMeanings } from './enrich';
+ 
++// limitResetsOn이 있으면 한도에 걸린 것이다.
+ export type RegenerateUsageResult =
+-  | { error: string }
++  | { error: string; limitResetsOn?: string }
+   | { error: null; meaningKo: string | null; meaningStatus: 'pending' | 'done' | 'failed'; failed: boolean };
+ 
+ // 카드 뒷면의 "다시 만들기": 용례 하나의 뜻을 새로 받는다. 실패하면 원래 뜻이 그대로 남고 failed가 true다.
+@@ -19,8 +20,9 @@ export async function regenerateUsageMeaning(
+ ): Promise<RegenerateUsageResult> {
+   if (!isId(occurrenceId)) return { error: '잘못된 요청입니다.' };
+   if (!getOccurrenceMeaning(db, userId, occurrenceId)) return { error: '용례를 찾을 수 없습니다.' };
+-  const result = await regenerateMeanings(db, userId, [occurrenceId], model);
++  const result = await regenerateMeanings(db, userId, [occurrenceId], model, 'card');
+   if (result.error === 'missing-key') return { error: MISSING_KEY_MESSAGE };
++  if (result.error === 'usage-limit') return { error: LIMIT_SLOT, limitResetsOn: result.resetsOn };
+   const meaning = getOccurrenceMeaning(db, userId, occurrenceId);
+   if (!meaning) return { error: '용례를 찾을 수 없습니다.' }; // 그 사이 카드가 지워졌다
+   return { error: null, ...meaning, failed: result.failed > 0 };
+diff --git a/tests/lib/meaning/gemini.test.ts b/tests/lib/meaning/gemini.test.ts
+index c280a42..dc6aadc 100644
+--- a/tests/lib/meaning/gemini.test.ts
++++ b/tests/lib/meaning/gemini.test.ts
+@@ -3,11 +3,16 @@ import {
+   createGeminiMeaningModel,
+   GarbledOutputError,
+   MEANING_MODEL_ID,
++  tokenUsage,
+   type GeminiClient,
+ } from '@/lib/meaning/gemini';
+ 
+ // models.generateContent만 흉내 내는 가짜 클라이언트. 실제 API는 호출하지 않는다.
+-function fakeClient(response: { text?: string; candidates?: { finishReason?: string }[] }) {
++function fakeClient(response: {
++  text?: string;
++  candidates?: { finishReason?: string }[];
++  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
++}) {
+   const calls: Record<string, unknown>[] = [];
+   const client = {
+     models: {
+@@ -97,3 +102,22 @@ describe('createGeminiMeaningModel', () => {
+     await expect(createGeminiMeaningModel(wrongShape.client)(batch)).rejects.toThrow();
+   });
+ });
++
++describe('token usage', () => {
++  it('reports every response, counting thinking tokens as output, even when the answer is rejected', async () => {
++    const seen: unknown[] = [];
++    const usageMetadata = { promptTokenCount: 120, candidatesTokenCount: 30, thoughtsTokenCount: 10 };
++    const ok = fakeClient({ text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루다' }] }), usageMetadata });
++    await createGeminiMeaningModel(ok.client)(batch, (u) => seen.push(u));
++    const garbled = fakeClient({ text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '머커뉴ᄆ' }] }), usageMetadata });
++    await expect(createGeminiMeaningModel(garbled.client)(batch, (u) => seen.push(u))).rejects.toThrow(GarbledOutputError);
++    expect(seen).toEqual([
++      { inputTokens: 120, outputTokens: 40 },
++      { inputTokens: 120, outputTokens: 40 },
++    ]);
++  });
++
++  it('counts missing usage as zero', () => {
++    expect(tokenUsage(undefined)).toEqual({ inputTokens: 0, outputTokens: 0 });
++  });
++});
+diff --git a/tests/lib/usage/limits.test.ts b/tests/lib/usage/limits.test.ts
+new file mode 100644
+index 0000000..7b03001
+--- /dev/null
++++ b/tests/lib/usage/limits.test.ts
+@@ -0,0 +1,57 @@
++import { describe, expect, it } from 'vitest';
++import { costUsd, kstMonthRange, readUsageLimits, resetsOnLabel } from '@/lib/usage/limits';
++
++describe('kstMonthRange', () => {
++  it('starts the month at 00:00 on the 1st in Korea (15:00 UTC the day before)', () => {
++    // 한국 시간 11월 1일 00:00 = UTC 10월 31일 15:00
++    const justBefore = new Date('2026-10-31T14:59:59.999Z');
++    const justAfter = new Date('2026-10-31T15:00:00.000Z');
++    expect(kstMonthRange(justBefore)).toEqual({
++      start: new Date('2026-09-30T15:00:00.000Z'),
++      end: new Date('2026-10-31T15:00:00.000Z'),
++      key: '2026-10',
++    });
++    expect(kstMonthRange(justAfter).key).toBe('2026-11');
++    expect(kstMonthRange(justAfter).start).toEqual(justAfter);
++  });
++
++  it('rolls over the year in December', () => {
++    expect(kstMonthRange(new Date('2026-12-15T00:00:00Z'))).toMatchObject({
++      end: new Date('2026-12-31T15:00:00.000Z'),
++      key: '2026-12',
++    });
++  });
++});
++
++describe('readUsageLimits', () => {
++  it('defaults to 4,000 words and $5 and accepts overrides', () => {
++    expect(readUsageLimits({})).toEqual({ monthlyWords: 4000, monthlyBudgetUsd: 5 });
++    expect(readUsageLimits({ MONTHLY_WORD_LIMIT: '5', GEMINI_MONTHLY_BUDGET_USD: '0.5' })).toEqual({
++      monthlyWords: 5,
++      monthlyBudgetUsd: 0.5,
++    });
++  });
++
++  it('ignores empty, non-numeric or negative values', () => {
++    expect(readUsageLimits({ MONTHLY_WORD_LIMIT: '', GEMINI_MONTHLY_BUDGET_USD: 'abc' })).toEqual({
++      monthlyWords: 4000,
++      monthlyBudgetUsd: 5,
++    });
++    expect(readUsageLimits({ MONTHLY_WORD_LIMIT: '-1' }).monthlyWords).toBe(4000);
++  });
++});
++
++describe('costUsd', () => {
++  it('prices input at $0.30 and output at $2.50 per million tokens', () => {
++    // M4-4 실측 논문 1편 규모
++    expect(costUsd({ inputTokens: 11_546, outputTokens: 4_000 })).toBeCloseTo(0.0134638, 7);
++  });
++});
++
++describe('resetsOnLabel', () => {
++  it('names the first day of the next Korean month without a year', () => {
++    expect(resetsOnLabel(new Date('2026-10-31T14:59:59Z'))).toBe('11월 1일');
++    expect(resetsOnLabel(new Date('2026-10-31T15:00:00Z'))).toBe('12월 1일');
++    expect(resetsOnLabel(new Date('2026-12-20T00:00:00Z'))).toBe('1월 1일');
++  });
++});
+diff --git a/tests/server/alerts.test.ts b/tests/server/alerts.test.ts
+new file mode 100644
+index 0000000..a7284da
+--- /dev/null
++++ b/tests/server/alerts.test.ts
+@@ -0,0 +1,104 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { addUser, USER } from '../helpers/users';
++import { createDb, type Db } from '@/server/db/client';
++import { alertLog } from '@/server/db/schema';
++import { notify, resetThrottleForTest, shouldSendThrottled, webhookBody } from '@/server/alerts/notify';
++import { reportUsageLimit, reserveMeaningUsage, UsageLimitError } from '@/server/services/meaning-usage';
++
++beforeEach(() => {
++  vi.spyOn(console, 'warn').mockImplementation(() => {});
++  vi.spyOn(console, 'error').mockImplementation(() => {});
++});
++afterEach(() => {
++  vi.unstubAllEnvs();
++  vi.unstubAllGlobals();
++  vi.restoreAllMocks();
++  resetThrottleForTest();
++});
++
++describe('webhookBody', () => {
++  it('uses Discord content and Slack text, and refuses anything else', () => {
++    expect(webhookBody('https://discord.com/api/webhooks/1/abc', 'hi')).toEqual({ content: 'hi' });
++    expect(webhookBody('https://discordapp.com/api/webhooks/1/abc', 'hi')).toEqual({ content: 'hi' });
++    expect(webhookBody('https://hooks.slack.com/services/T/B/x', 'hi')).toEqual({ text: 'hi' });
++    expect(webhookBody('https://example.com/hook', 'hi')).toBeNull();
++    expect(webhookBody('http://discord.com/api/webhooks/1/abc', 'hi')).toBeNull();
++    expect(webhookBody('not a url', 'hi')).toBeNull();
++  });
++});
++
++describe('notify', () => {
++  it('posts JSON to the webhook', async () => {
++    const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
++    await notify('가입 신청', { ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/T/B/x' }, fetcher);
++    expect(fetcher).toHaveBeenCalledTimes(1);
++    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
++    expect(url).toBe('https://hooks.slack.com/services/T/B/x');
++    expect(init).toMatchObject({ method: 'POST', headers: { 'Content-Type': 'application/json' } });
++    expect(JSON.parse(init.body as string)).toEqual({ text: '가입 신청' });
++  });
++
++  it('only logs when there is no webhook, and never throws when sending fails', async () => {
++    const fetcher = vi.fn(async () => {
++      throw new TypeError('fetch failed');
++    });
++    await notify('a', {}, fetcher);
++    expect(fetcher).not.toHaveBeenCalled();
++    await expect(notify('b', { ALERT_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/x' }, fetcher)).resolves.toBeUndefined();
++  });
++});
++
++describe('shouldSendThrottled', () => {
++  it('sends the same key once per window', () => {
++    expect(shouldSendThrottled('k', 0, 1000)).toBe(true);
++    expect(shouldSendThrottled('k', 999, 1000)).toBe(false);
++    expect(shouldSendThrottled('other', 999, 1000)).toBe(true);
++    expect(shouldSendThrottled('k', 1000, 1000)).toBe(true);
++  });
++});
++
++describe('usage alerts', () => {
++  let db: Db;
++  const NOW = new Date('2026-10-17T03:00:00Z');
++  let sent: string[];
++  beforeEach(() => {
++    db = createDb(':memory:');
++    addUser(db);
++    sent = [];
++    vi.stubEnv('ALERT_WEBHOOK_URL', 'https://discord.com/api/webhooks/1/x');
++    vi.stubGlobal(
++      'fetch',
++      vi.fn(async (_url: string, init: RequestInit) => {
++        sent.push((JSON.parse(init.body as string) as { content: string }).content);
++        return new Response(null, { status: 204 });
++      }),
++    );
++  });
++  const flush = () => new Promise((r) => setTimeout(r, 0));
++
++  it('alerts once per month at 80% and 100% of the budget', async () => {
++    const limits = { monthlyWords: 1_000_000, monthlyBudgetUsd: 1 };
++    const spend = (outputTokens: number) => {
++      const m = reserveMeaningUsage(db, USER, 'save', 1, { now: NOW, limits });
++      m.onUsage({ inputTokens: 0, outputTokens });
++      m.finish();
++    };
++    spend(320_000); // $0.80
++    spend(1); // 이미 보낸 80%는 다시 보내지 않는다
++    spend(80_000); // $1.00
++    await flush();
++    expect(sent).toEqual([
++      'Gemini 이번 달 비용이 상한의 80%에 닿았습니다: $0.80 / $1.00',
++      'Gemini 이번 달 비용이 상한의 100%에 닿았습니다: $1.00 / $1.00',
++    ]);
++    expect(db.select({ key: alertLog.key }).from(alertLog).all().map((r) => r.key).sort()).toEqual(['budget-100:2026-10', 'budget-80:2026-10']);
++  });
++
++  it('alerts once per user per month when the personal limit is hit', async () => {
++    const err = new UsageLimitError('user-limit', '11월 1일');
++    reportUsageLimit(db, USER, err, { now: NOW, limits: { monthlyWords: 4000, monthlyBudgetUsd: 5 } });
++    reportUsageLimit(db, USER, err, { now: NOW, limits: { monthlyWords: 4000, monthlyBudgetUsd: 5 } });
++    await flush();
++    expect(sent).toEqual(['user-a (user-a@example.com) 님이 이번 달 한도(4000단어)에 닿았습니다.']);
++  });
++});
+diff --git a/tests/server/auth.test.ts b/tests/server/auth.test.ts
+index 7d22c9a..658537a 100644
+--- a/tests/server/auth.test.ts
++++ b/tests/server/auth.test.ts
+@@ -1,5 +1,5 @@
+ import { eq } from 'drizzle-orm';
+-import { beforeEach, describe, expect, it } from 'vitest';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+ import { createDb, type Db } from '@/server/db/client';
+ import { users } from '@/server/db/schema';
+ import { createAuth } from '@/server/auth/auth';
+@@ -47,3 +47,19 @@ describe('createAuth', () => {
+     expect(db.select().from(users).all()).toEqual([]);
+   });
+ });
++
++describe('sign-up alert', () => {
++  afterEach(() => vi.restoreAllMocks());
++
++  it('tells the admin about a pending sign-up, but not about an admin account', async () => {
++    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
++    vi.spyOn(console, 'warn').mockImplementation(() => {});
++    const auth = createAuth(db, { ...env, ALERT_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/x' });
++    await signUp(auth, 'owner@example.com');
++    await signUp(auth, 'friend@example.com');
++    await new Promise((r) => setTimeout(r, 0));
++    expect(fetcher).toHaveBeenCalledTimes(1);
++    const body = JSON.parse((fetcher.mock.calls[0][1] as RequestInit).body as string) as { content: string };
++    expect(body.content).toBe('가입 신청: friend (friend@example.com)\nhttp://localhost:3300/admin');
++  });
++});
+diff --git a/tests/server/per-user-migration.test.ts b/tests/server/per-user-migration.test.ts
+index 527e777..ac81706 100644
+--- a/tests/server/per-user-migration.test.ts
++++ b/tests/server/per-user-migration.test.ts
+@@ -28,7 +28,8 @@ function migrateUpTo0005(target: string) {
+   fs.cpSync(path.join(process.cwd(), 'drizzle'), folder, { recursive: true });
+   const journalPath = path.join(folder, 'meta', '_journal.json');
+   const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8')) as { entries: { tag: string }[] };
+-  journal.entries = journal.entries.filter((e) => e.tag !== '0006_per_user');
++  // 0006부터 뒤는 모두 뺀다. 뒤 마이그레이션(0007 등)이 먼저 적용되면 drizzle은 그보다 오래된 0006을 건너뛴다.
++  journal.entries = journal.entries.filter((e) => Number(e.tag.slice(0, 4)) < 6);
+   fs.writeFileSync(journalPath, JSON.stringify(journal));
+   const sqlite = new Database(target);
+   migrate(drizzle({ client: sqlite }), { migrationsFolder: folder });
+diff --git a/tests/server/usage.test.ts b/tests/server/usage.test.ts
+new file mode 100644
+index 0000000..5a9c445
+--- /dev/null
++++ b/tests/server/usage.test.ts
+@@ -0,0 +1,192 @@
++import { eq } from 'drizzle-orm';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { addUser, OTHER, USER } from '../helpers/users';
++import { createDb, type Db } from '@/server/db/client';
++import { knownWords, meaningUsage, users, words } from '@/server/db/schema';
++import { listOccurrencesByDocument, markMeaningsFailed, saveReviewSelection } from '@/server/repo/cards';
++import { listCandidates, replaceCandidates } from '@/server/repo/candidates';
++import { createDocument, getDocument, updateDocumentStatus } from '@/server/repo/documents';
++import { monthlySpendUsd, monthlyWordsByUser, monthlyWordsOf, reserveUsage } from '@/server/repo/usage';
++import { regenerateMeanings, type EnrichDeps } from '@/server/services/enrich';
++import { reserveMeaningUsage, UsageLimitError } from '@/server/services/meaning-usage';
++import { saveReviewAndEnrich } from '@/server/services/save-review';
++import { regenerateUsageMeaning } from '@/server/services/usage-meaning';
++import type { MeaningModel } from '@/lib/meaning/generate';
++import { LIMIT_SLOT } from '@/lib/regen-messages';
++
++let db: Db;
++beforeEach(() => {
++  db = createDb(':memory:');
++  addUser(db);
++  addUser(db, OTHER);
++  vi.stubEnv('ALERT_WEBHOOK_URL', '');
++  vi.spyOn(console, 'warn').mockImplementation(() => {});
++});
++afterEach(() => {
++  vi.unstubAllEnvs();
++  vi.restoreAllMocks();
++});
++
++const NOW = new Date('2026-10-17T03:00:00Z');
++const LIMITS = { monthlyWords: 10, monthlyBudgetUsd: 5 };
++
++// 응답마다 입력 100, 출력 40토큰을 쓰는 가짜 모델.
++const model: MeaningModel = async (batch, onUsage) => {
++  onUsage?.({ inputTokens: 100, outputTokens: 40 });
++  return batch.map((r) => ({ id: r.id, meaningKo: `${r.word}의 뜻` }));
++};
++const deps = (meaningModel: MeaningModel | null = model): EnrichDeps => ({
++  meaningModel,
++  lookupPhonetic: async () => null,
++});
++
++function reviewingDocument(userId: string, lemmas: string[]) {
++  const doc = createDocument(db, userId, { title: 'Paper', kind: 'paper' });
++  replaceCandidates(
++    db,
++    doc.id,
++    lemmas.map((lemma) => ({ lemma, surface: lemma, sentence: `The ${lemma} matters.`, count: 1, isExisting: false, inDictionary: true })),
++  );
++  updateDocumentStatus(db, doc.id, 'reviewing');
++  return { doc, ids: listCandidates(db, userId, doc.id).map((c) => c.id) };
++}
++
++describe('reserveUsage', () => {
++  it('counts words per user within the Korean month and holds the reservation', () => {
++    expect(reserveUsage(db, USER, 'save', 6, NOW, LIMITS)).toMatchObject({ ok: true });
++    // 맡아 둔 6단어가 이미 들어 있어 5단어는 넘친다.
++    expect(reserveUsage(db, USER, 'save', 5, NOW, LIMITS)).toEqual({ ok: false, reason: 'user-limit' });
++    expect(reserveUsage(db, USER, 'save', 4, NOW, LIMITS)).toMatchObject({ ok: true });
++    // 다른 사람과 다음 달은 따로 센다.
++    expect(reserveUsage(db, OTHER, 'save', 10, NOW, LIMITS)).toMatchObject({ ok: true });
++    expect(reserveUsage(db, USER, 'save', 10, new Date('2026-10-31T15:00:00Z'), LIMITS)).toMatchObject({ ok: true });
++    expect(monthlyWordsOf(db, USER, NOW)).toBe(10);
++    expect(monthlyWordsByUser(db, NOW)).toEqual(new Map([[USER, 10], [OTHER, 10]]));
++  });
++
++  it('refuses when the estimated cost would pass the monthly budget', () => {
++    const tight = { monthlyWords: 100_000, monthlyBudgetUsd: 0.001 }; // 단어당 예상 $0.0001 → 10단어까지
++    expect(reserveUsage(db, USER, 'save', 10, NOW, tight)).toMatchObject({ ok: true });
++    expect(reserveUsage(db, OTHER, 'save', 1, NOW, tight)).toEqual({ ok: false, reason: 'budget' });
++  });
++});
++
++describe('reserveMeaningUsage', () => {
++  it('settles the reservation with the real token cost', () => {
++    const meter = reserveMeaningUsage(db, USER, 'save', 3, { now: NOW, limits: LIMITS });
++    meter.onUsage({ inputTokens: 1_000_000, outputTokens: 0 });
++    meter.onUsage({ inputTokens: 0, outputTokens: 1_000_000 });
++    meter.finish();
++    meter.finish(); // 두 번 불러도 한 번만 정산한다
++    expect(db.select().from(meaningUsage).all()).toMatchObject([
++      { userId: USER, source: 'save', words: 3, inputTokens: 1_000_000, outputTokens: 1_000_000, costUsd: 2.8, settled: true },
++    ]);
++    expect(monthlySpendUsd(db, NOW)).toBeCloseTo(2.8);
++  });
++
++  it('keeps the cost when the user is deleted', () => {
++    reserveMeaningUsage(db, OTHER, 'save', 3, { now: NOW, limits: LIMITS }).finish();
++    db.delete(users).where(eq(users.id, OTHER)).run();
++    expect(db.select().from(meaningUsage).all()).toMatchObject([{ userId: null, words: 3 }]);
++  });
++
++  it('throws UsageLimitError with the reset day, without writing anything', () => {
++    expect(() => reserveMeaningUsage(db, USER, 'save', 11, { now: NOW, limits: LIMITS })).toThrow(UsageLimitError);
++    try {
++      reserveMeaningUsage(db, USER, 'save', 11, { now: NOW, limits: LIMITS });
++    } catch (err) {
++      expect(err).toMatchObject({ reason: 'user-limit', resetsOn: '11월 1일' });
++    }
++    expect(db.select().from(meaningUsage).all()).toEqual([]);
++  });
++});
++
++describe('saveReviewAndEnrich', () => {
++  it('saves, counts one word per saved usage and records the tokens', async () => {
++    const { doc, ids } = reviewingDocument(USER, ['robust', 'paradigm']);
++    expect(await saveReviewAndEnrich(db, USER, doc.id, ids, deps())).toEqual({ error: null });
++    expect(getDocument(db, USER, doc.id)?.status).toBe('done');
++    expect(db.select().from(meaningUsage).all()).toMatchObject([
++      { userId: USER, source: 'save', words: 2, inputTokens: 100, outputTokens: 40, settled: true },
++    ]);
++  });
++
++  it('changes nothing when the save would pass the limit', async () => {
++    vi.stubEnv('MONTHLY_WORD_LIMIT', '1');
++    const { doc, ids } = reviewingDocument(USER, ['robust', 'paradigm']);
++    const result = await saveReviewAndEnrich(db, USER, doc.id, ids.slice(0, 1).concat(ids.slice(1)), deps());
++    expect(result).toEqual({ error: LIMIT_SLOT, limitResetsOn: expect.stringMatching(/^\d{1,2}월 1일$/) });
++    expect(getDocument(db, USER, doc.id)?.status).toBe('reviewing');
++    expect(listCandidates(db, USER, doc.id)).toHaveLength(2);
++    expect(db.select().from(words).all()).toEqual([]);
++    expect(db.select().from(knownWords).all()).toEqual([]);
++    expect(db.select().from(meaningUsage).all()).toEqual([]);
++  });
++
++  it('counts only selected candidates (unselected ones become known words)', async () => {
++    vi.stubEnv('MONTHLY_WORD_LIMIT', '1');
++    const { doc, ids } = reviewingDocument(USER, ['robust', 'paradigm']);
++    expect(await saveReviewAndEnrich(db, USER, doc.id, ids.slice(0, 1), deps())).toEqual({ error: null });
++    expect(db.select().from(meaningUsage).all()).toMatchObject([{ words: 1 }]);
++  });
++
++  it('does not check or record usage without an API key', async () => {
++    vi.stubEnv('MONTHLY_WORD_LIMIT', '0');
++    const { doc, ids } = reviewingDocument(USER, ['robust']);
++    expect(await saveReviewAndEnrich(db, USER, doc.id, ids, deps(null))).toEqual({ error: null });
++    expect(db.select().from(meaningUsage).all()).toEqual([]);
++  });
++
++  it('counts a retried batch once but bills every response', async () => {
++    let calls = 0;
++    const flaky: MeaningModel = async (batch, onUsage) => {
++      onUsage?.({ inputTokens: 100, outputTokens: 40 });
++      if (calls++ === 0) throw Object.assign(new Error('busy'), { status: 503 });
++      return batch.map((r) => ({ id: r.id, meaningKo: '뜻' }));
++    };
++    vi.useFakeTimers({ toFake: ['setTimeout'] });
++    const { doc, ids } = reviewingDocument(USER, ['robust']);
++    const pending = saveReviewAndEnrich(db, USER, doc.id, ids, deps(flaky));
++    await vi.runAllTimersAsync();
++    await pending;
++    vi.useRealTimers();
++    expect(db.select().from(meaningUsage).all()).toMatchObject([{ words: 1, inputTokens: 200, outputTokens: 80 }]);
++  });
++});
++
++describe('regenerate entrances', () => {
++  function failedUsages(lemmas: string[]) {
++    const { doc, ids } = reviewingDocument(USER, lemmas);
++    const saved = saveReviewSelection(db, USER, doc.id, ids);
++    markMeaningsFailed(db, saved.occurrenceIds);
++    return { doc, saved };
++  }
++
++  it('records regenerate and card sources', async () => {
++    const { saved } = failedUsages(['robust', 'paradigm']);
++    await regenerateMeanings(db, USER, saved.occurrenceIds, model);
++    await regenerateUsageMeaning(db, USER, saved.occurrenceIds[0], model);
++    expect(db.select({ source: meaningUsage.source, words: meaningUsage.words }).from(meaningUsage).all()).toEqual([
++      { source: 'regenerate', words: 2 },
++      { source: 'card', words: 1 },
++    ]);
++  });
++
++  it('keeps the old meanings and reports usage-limit when over the limit', async () => {
++    vi.stubEnv('MONTHLY_WORD_LIMIT', '1');
++    const { doc, saved } = failedUsages(['robust', 'paradigm']);
++    expect(await regenerateMeanings(db, USER, saved.occurrenceIds, model)).toMatchObject({ error: 'usage-limit' });
++    expect(await regenerateUsageMeaning(db, USER, saved.occurrenceIds[0], model)).toEqual({ error: null, meaningKo: 'robust의 뜻', meaningStatus: 'done', failed: false });
++    expect(await regenerateUsageMeaning(db, USER, saved.occurrenceIds[1], model)).toMatchObject({
++      error: LIMIT_SLOT,
++      limitResetsOn: expect.any(String),
++    });
++    expect(listOccurrencesByDocument(db, USER, doc.id).map((r) => r.meaningStatus)).toEqual(['failed', 'done']);
++  });
++
++  it('does not count ids that belong to someone else', async () => {
++    const { saved } = failedUsages(['robust']);
++    expect(await regenerateMeanings(db, OTHER, saved.occurrenceIds, model)).toEqual({ error: null, done: 0, failed: 0 });
++    expect(db.select().from(meaningUsage).all()).toEqual([]);
++  });
++});
