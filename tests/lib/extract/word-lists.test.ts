@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isAcademic } from '@/lib/extract/academic';
+import { hasAcademicList, isAcademic } from '@/lib/extract/academic';
 import { inDictionary } from '@/lib/extract/dictionary';
 
-describe('isAcademic', () => {
+// data/awl.json은 저장소에 없다(라이선스). 각자 만든 목록이 있을 때만 확인한다.
+describe.skipIf(!hasAcademicList())('isAcademic', () => {
   it('recognizes AWL headwords by lemma', () => {
     expect(isAcademic('hence')).toBe(true);
     expect(isAcademic('derive')).toBe(true);
