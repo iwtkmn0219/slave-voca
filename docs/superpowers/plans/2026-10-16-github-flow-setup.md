@@ -93,7 +93,7 @@ PR #1의 기존 커밋(CI, CHANGELOG, CONTRIBUTING, README, `chore(release): v0.
    - `npm version X.Y.Z --no-git-tag-version`을 실행한다.
    - `CHANGELOG.md`의 `[Unreleased]`를 `## [X.Y.Z] - YYYY-MM-DD`로 바꾸고, 맨 아래 비교 링크를 고친다.
    - `chore(release): vX.Y.Z`로 커밋해 `development`에 PR·병합한다.
-2. `gh pr create --base main --head development --title "release: vX.Y.Z"`로 PR을 열고, CI가 통과하면 병합 커밋으로 병합한다(`--delete-branch` 없이).
+2. `gh pr create --base main --head development --title "release: vX.Y.Z"`로 PR을 연다. CI가 통과하면 저장소 주인의 검수를 받은 뒤 병합 커밋으로 병합한다(`--delete-branch` 없이).
 3. main의 그 병합 커밋에 태그를 단다: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`
 4. `gh release create vX.Y.Z --title vX.Y.Z --notes-file notes.md`. `notes.md`에는 변경 기록의 그 버전 구역을 넣고, 커밋하지 않는다.
 
@@ -121,7 +121,15 @@ PR #1 본문 끝에 한 줄을 덧붙인다(`gh pr edit 1 --body-file …`). 내
 
 CI가 실패하면 원인을 고친 새 커밋을 push한다. 앱 동작을 바꿔야 하는 실패면 멈추고 PM에게 알린다. 이 PR은 앱 코드를 바꾸지 않으므로 Codex 리뷰는 CI 설정과 Review Focus 1·5만 짧게 맡기고, 요약을 PR 댓글로 남긴다.
 
-- [ ] **Step 4: 병합**
+- [ ] **Step 4: 사용자 검수 후 병합**
+
+main으로 가는 병합이므로 먼저 사용자에게 검수를 받는다(설계서 2.1). 사용자에게 보일 것:
+- PR #1 링크
+- CI 결과
+- Codex 리뷰 요약
+- 변경 기록의 0.4.0 구역
+
+승인을 받은 다음에 병합한다.
 
 ```bash
 gh pr merge 1 --merge --delete-branch

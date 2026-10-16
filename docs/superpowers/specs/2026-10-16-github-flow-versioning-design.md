@@ -31,7 +31,7 @@
 4. **핫픽스:**
    1. `origin/main`에서 `hotfix/…`를 딴다.
    2. 고치는 커밋과 `chore(release): vX.Y.Z`(PATCH) 커밋을 넣고 `--base main` PR을 연다.
-   3. 병합한 뒤 태그와 릴리스를 만든다.
+   3. 사용자 검수(2.1)를 받아 병합한 뒤 태그와 릴리스를 만든다.
    4. 이어서 `main` → `development` PR을 열어 고친 내용을 development에도 들인다.
 5. 강제 push는 하지 않는다. 열린 PR 브랜치의 커밋도 고쳐 쓰지 않고 새 커밋으로 고친다.
 
@@ -39,7 +39,8 @@
 
 - **PM:** 설계서·계획서를 `docs/…` 브랜치로 올려 `--base development` PR을 열고, CI가 통과하면 직접 병합한다. 문서 PR은 Codex 리뷰를 받지 않는다.
 - **Developer:** `feat/…`·`fix/…`·`hotfix/…`에서 구현한다. PR, CI, Codex 리뷰, 병합을 맡는다. 릴리스(3장)는 PM이 "릴리스하자"고 알릴 때 한다.
-- **사용자 승인(2026-10-16):** 이 흐름 안에서 브랜치 push, PR, 병합, 태그, 릴리스를 할 때 매번 묻지 않는다. 다음은 이 승인에 들어가지 않으므로 그때마다 사용자에게 묻는다.
+- **main 병합 전 사용자 검수(2026-10-16 사용자 지시):** "앞으로 main에 병합하기 전에 항상 나에게 우선 검수 부탁해." main으로 가는 PR(릴리스, 핫픽스, PR #1)은 CI 통과와 리뷰 요약까지 마친 뒤 멈춘다. PR 링크, CI 결과, 리뷰 요약, 들어가는 변경(변경 기록의 그 버전 구역)을 사용자에게 보이고, 승인을 받은 다음에 병합한다. 태그와 릴리스는 그 승인에 포함된다. development로 가는 PR은 묻지 않고 병합한다.
+- **사용자 승인(2026-10-16):** 위의 main 병합을 빼면, 이 흐름 안에서 브랜치 push, PR, development 병합, 태그, 릴리스를 할 때 매번 묻지 않는다. 다음은 이 승인에 들어가지 않으므로 그때마다 사용자에게 묻는다.
   - 기록 고쳐 쓰기
   - 강제 push
   - 규칙 세트 해제
@@ -66,7 +67,7 @@ PM과 Developer가 같은 작업 폴더를 쓰면 브랜치를 바꿀 때 서로
      - `npm version X.Y.Z --no-git-tag-version`
      - `[Unreleased]`를 `## [X.Y.Z] - 날짜`로 바꾸고, 비교 링크를 고친다.
      - 이 커밋으로 `--base development` PR을 열고 병합한다.
-  2. `development` → `main` PR(`gh pr create --base main --head development --title "release: vX.Y.Z"`)을 열고, CI가 통과하면 병합 커밋으로 병합한다. 브랜치를 지우지 않도록 `--delete-branch`는 쓰지 않는다.
+  2. `development` → `main` PR(`gh pr create --base main --head development --title "release: vX.Y.Z"`)을 연다. CI가 통과하면 **사용자 검수를 받은 뒤**(2.1) 병합 커밋으로 병합한다. 브랜치를 지우지 않도록 `--delete-branch`는 쓰지 않는다.
   3. main의 그 병합 커밋에 주석 태그를 단다: `git tag -a vX.Y.Z -m "vX.Y.Z"` → `git push origin vX.Y.Z`
   4. GitHub 릴리스를 만든다: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <변경 기록의 그 버전 구역>`
 - **지금까지의 기록에 다는 태그:** 마일스톤 병합 커밋에 단다. `package.json`은 그동안 0.1.0이었지만 태그가 기준이다.
