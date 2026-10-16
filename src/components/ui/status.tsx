@@ -42,7 +42,7 @@ export function Status({
 // 글자는 span 하나로 감싼다. 그러지 않으면 flex gap이 숫자 앞뒤에 끼어 "뜻  206  개"처럼 벌어진다.
 export function Failed({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[13px] text-muted">
+    <span className="inline-flex items-center gap-1.5 text-[13px] font-normal text-muted">
       <span aria-hidden className="w-2.5 border-t-2 border-dashed border-again" />
       <span>{children}</span>
     </span>
@@ -53,7 +53,7 @@ export function Failed({ children }: { children: React.ReactNode }) {
 // 글이 여러 줄이 되면 표시 줄은 첫 줄에 맞춘다.
 export function Limited({ children, className = "text-[13px]" }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className={`inline-flex items-baseline gap-1.5 whitespace-normal text-muted ${className}`}>
+    <span className={`inline-flex items-baseline gap-1.5 font-normal whitespace-normal text-muted ${className}`}>
       <span aria-hidden className="w-2.5 shrink-0 -translate-y-[3px] border-t-2 border-hard" />
       <span>{children}</span>
     </span>

@@ -552,8 +552,9 @@ export function StudySession({
 
         {revealed ? (
           <>
+            {/* 발음기호가 없을 때의 안내는 한글이라 영어 글꼴(Gentium)이 아닌 sans로 쓴다(개편안 3.3) */}
             <p
-              className={`mt-1 font-en text-[19px] max-sm:text-[17px] ${card.phonetic ? "text-muted" : "text-[15px] text-muted max-sm:text-[15px]"}`}
+              className={`mt-1 text-muted ${card.phonetic ? "font-en text-[19px] max-sm:text-[17px]" : "font-sans text-[15px]"}`}
             >
               {card.phonetic ?? "발음기호 없음"}
             </p>
