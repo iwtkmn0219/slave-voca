@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   const occurrenceId = typeof body === "object" && body !== null ? (body as { occurrenceId?: unknown }).occurrenceId : undefined;
   // DB를 열기 전에 형태부터 거른다.
   if (!isId(occurrenceId)) return Response.json({ error: "잘못된 요청입니다." }, { status: 400 });
-  const result = await regenerateUsageMeaning(getDb(), occurrenceId, defaultMeaningModel());
+  const result = await regenerateUsageMeaning(getDb(), user.id, occurrenceId, defaultMeaningModel());
   if (result.error === null) revalidatePath("/documents", "layout"); // 문서 단어 목록에도 새 뜻이 보이게 한다
   return Response.json(result);
 }

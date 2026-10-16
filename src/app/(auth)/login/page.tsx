@@ -14,7 +14,7 @@ export default function LoginPage(props: PageProps<"/login">) {
   return (
     <>
       <h1 className="text-2xl leading-[1.35] font-bold tracking-[-0.01em]">
-        논문에서 만난 단어를<br className="max-sm:hidden" /> 그 문장의 뜻으로 외웁니다
+        논문에서 만난 단어를<br /> 그 문장의 뜻으로 외웁니다
       </h1>
       <p className="mt-2.5 mb-6 text-[15px] leading-[1.6] text-ink-2">
         PDF를 올리면 어려운 영어 단어를 골라 문장 속 뜻과 발음기호를 붙이고, 간격 반복으로 복습하게 합니다.
@@ -35,8 +35,19 @@ export default function LoginPage(props: PageProps<"/login">) {
       <p className="mt-3.5 text-[13px] text-muted">
         초대받은 분만 쓸 수 있습니다. 처음 로그인하면 관리자가 승인한 뒤부터 쓸 수 있습니다.
       </p>
+      <Suspense fallback={null}>
+        <DevLogin searchParams={props.searchParams} />
+      </Suspense>
     </>
   );
+}
+
+// 개발 전용 로그인(이 컴퓨터 주소에서 AUTH_DEV_LOGIN=1일 때만). 환경변수는 요청 때 읽는다.
+async function DevLogin({ searchParams }: { searchParams: PageProps<"/login">["searchParams"] }) {
+  await connection();
+  if (!devLoginEnabled(process.env)) return null;
+  const { next } = await searchParams;
+  return <DevLoginForm next={safeNextPath(next)} />;
 }
 
 async function LoginActions({ searchParams }: { searchParams: PageProps<"/login">["searchParams"] }) {
@@ -60,7 +71,6 @@ async function LoginActions({ searchParams }: { searchParams: PageProps<"/login"
         </Notice>
       )}
       <GoogleSignInButton next={next} />
-      {devLoginEnabled(process.env) && <DevLoginForm next={next} />}
     </>
   );
 }

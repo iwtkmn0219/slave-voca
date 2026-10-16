@@ -25,16 +25,16 @@ export default function Home() {
 }
 
 async function TodaySummary() {
-  await requireUser();
+  const user = await requireUser();
   const db = getDb();
   const now = new Date();
-  const settings = getSettings(db);
-  const { review, fresh } = countStudyToday(db, now, settings.dailyNewLimit);
-  const docs = listDocuments(db);
+  const settings = getSettings(db, user.id);
+  const { review, fresh } = countStudyToday(db, user.id, now, settings.dailyNewLimit);
+  const docs = listDocuments(db, user.id);
   const recent = docs.slice(0, RECENT_DOCUMENTS);
-  const wordCounts = countOccurrencesByDocument(db);
-  const candidateCounts = countCandidatesByDocument(db);
-  const failedCounts = countFailedMeaningsByDocument(db);
+  const wordCounts = countOccurrencesByDocument(db, user.id);
+  const candidateCounts = countCandidatesByDocument(db, user.id);
+  const failedCounts = countFailedMeaningsByDocument(db, user.id);
   const totalFailed = [...failedCounts.values()].reduce((a, b) => a + b, 0);
   const missingKey = !process.env.GEMINI_API_KEY;
 

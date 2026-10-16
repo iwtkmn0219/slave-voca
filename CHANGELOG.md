@@ -7,10 +7,13 @@
 ### 추가
 - Google 계정 로그인과 가입 승인. 처음 가입한 계정은 관리자가 승인할 때까지 승인 대기 화면만 본다. 관리자(`ADMIN_EMAILS`)는 `/admin`에서 승인·사용 중지·다시 허용을 한다.
 - 개발 전용 로그인(`AUTH_DEV_LOGIN=1`, localhost 주소에서만).
+- 데이터를 사용자별로 나눴다. 문서·카드·아는 단어·설정은 각자의 것이고, 다른 사람의 데이터는 보거나 바꿀 수 없다.
+- `npm run db:claim -- <이메일>`: 로그인 전에 쓰던 데이터를 내 계정으로 옮긴다(README).
 
 ### 업그레이드 시 주의
 - 새 환경변수가 필요하다: `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS`. README "Google 로그인 설정"을 따른다.
 - DB 마이그레이션 `0005_auth`(로그인 표)가 실행 때 자동으로 적용된다.
+- DB 마이그레이션 `0006_per_user`가 기존 데이터를 임시 소유자에게 묶는다. 업그레이드한 뒤 한 번 로그인하고 `npm run db:claim -- <이메일>`을 실행해야 이전 데이터가 보인다.
 
 ## [0.5.0] - 2026-10-16
 

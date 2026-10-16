@@ -22,12 +22,12 @@ export default function DocumentsPage() {
 }
 
 async function DocumentList() {
-  await requireUser();
+  const user = await requireUser();
   const db = getDb();
-  const docs = listDocuments(db);
-  const candidateCounts = countCandidatesByDocument(db);
-  const wordCounts = countOccurrencesByDocument(db);
-  const failedCounts = countFailedMeaningsByDocument(db);
+  const docs = listDocuments(db, user.id);
+  const candidateCounts = countCandidatesByDocument(db, user.id);
+  const wordCounts = countOccurrencesByDocument(db, user.id);
+  const failedCounts = countFailedMeaningsByDocument(db, user.id);
 
   if (docs.length === 0) return <p className="mt-5 text-muted">아직 올린 문서가 없습니다.</p>;
 

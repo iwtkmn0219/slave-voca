@@ -13,14 +13,15 @@ export type RegenerateUsageResult =
 // 입력은 브라우저가 보낸 값이므로 unknown으로 받아 형태부터 확인한다.
 export async function regenerateUsageMeaning(
   db: Db,
+  userId: string,
   occurrenceId: unknown,
   model: MeaningModel | null,
 ): Promise<RegenerateUsageResult> {
   if (!isId(occurrenceId)) return { error: '잘못된 요청입니다.' };
-  if (!getOccurrenceMeaning(db, occurrenceId)) return { error: '용례를 찾을 수 없습니다.' };
-  const result = await regenerateMeanings(db, [occurrenceId], model);
+  if (!getOccurrenceMeaning(db, userId, occurrenceId)) return { error: '용례를 찾을 수 없습니다.' };
+  const result = await regenerateMeanings(db, userId, [occurrenceId], model);
   if (result.error === 'missing-key') return { error: MISSING_KEY_MESSAGE };
-  const meaning = getOccurrenceMeaning(db, occurrenceId);
+  const meaning = getOccurrenceMeaning(db, userId, occurrenceId);
   if (!meaning) return { error: '용례를 찾을 수 없습니다.' }; // 그 사이 카드가 지워졌다
   return { error: null, ...meaning, failed: result.failed > 0 };
 }

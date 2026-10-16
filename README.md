@@ -36,6 +36,16 @@ npm run dev
    - 승인된 리디렉션 URI: `<BETTER_AUTH_URL>/api/auth/callback/google` (예: `http://localhost:3000/api/auth/callback/google`). 배포 주소가 생기면 그 주소도 더한다.
 4. 받은 클라이언트 ID와 보안 비밀을 `.env.local`의 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`에 넣고, `BETTER_AUTH_SECRET`(32자 이상 무작위)과 `ADMIN_EMAILS`(내 Google 이메일)를 채운다.
 
+### 이전 데이터 옮기기(M6 이전에 쓰던 DB)
+
+로그인이 생기기 전의 문서·카드·아는 단어·설정은 업그레이드할 때 임시 소유자에게 묶입니다. 내 계정으로 옮기려면 다음 순서를 따릅니다.
+
+1. 앱을 실행하고 내 Google 계정(또는 개발용 로그인)으로 한 번 로그인합니다.
+2. 앱을 끄지 않아도 됩니다. 다른 터미널에서 `npm run db:claim -- 내이메일@gmail.com`을 실행합니다. 다른 DB를 쓰면 `SLAVE_VOCA_DB`도 지정합니다.
+3. "옮겼습니다: 문서 n, 카드 n, …"이 나오면 끝입니다. 화면을 새로 고치면 보입니다.
+
+그 계정에 이미 데이터가 있으면 합치지 않고 멈춥니다(같은 단어 카드가 겹치지 않게).
+
 ## 데이터 출처
 
 | 파일 | 출처 | 조건 |

@@ -25,13 +25,13 @@ export async function regenerateDocumentMeanings(
   documentId: unknown,
   occurrenceIds: unknown,
 ): Promise<RegenerateActionResult> {
-  await requireUser();
+  const user = await requireUser();
   const ids = parseIdList(occurrenceIds);
   if (!isId(documentId) || ids === null) return { error: BAD_REQUEST };
   const db = getDb();
-  if (!occurrencesBelongTo(db, documentId, ids)) return { error: BAD_REQUEST };
-  const targets = ids.length > 0 ? ids : listFailedMeaningIds(db, documentId);
-  const result = await regenerateMeanings(db, targets, defaultMeaningModel());
+  if (!occurrencesBelongTo(db, user.id, documentId, ids)) return { error: BAD_REQUEST };
+  const targets = ids.length > 0 ? ids : listFailedMeaningIds(db, user.id, documentId);
+  const result = await regenerateMeanings(db, user.id, targets, defaultMeaningModel());
   if (result.error === "missing-key") return { error: MISSING_KEY_MESSAGE };
   refresh(documentId);
   return result;
@@ -39,9 +39,9 @@ export async function regenerateDocumentMeanings(
 
 // 카드 삭제: 모든 문서의 용례와 복습 기록이 함께 지워진다.
 export async function removeCard(documentId: unknown, wordId: unknown): Promise<{ error: string | null }> {
-  await requireUser();
+  const user = await requireUser();
   if (!isId(documentId) || !isId(wordId)) return { error: BAD_REQUEST };
-  if (!deleteCard(getDb(), wordId)) return { error: "카드를 찾을 수 없습니다." };
+  if (!deleteCard(getDb(), user.id, wordId)) return { error: "카드를 찾을 수 없습니다." };
   refresh(documentId);
   revalidatePath("/study");
   return { error: null };

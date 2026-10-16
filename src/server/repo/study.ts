@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
+import { and, asc, count, desc, eq, getTableColumns, gte, inArray, lte, ne } from 'drizzle-orm';
 import { previewIntervals, type Intervals } from '@/lib/srs/interval';
 import {
   ANSWER_GRADE,
@@ -38,30 +38,31 @@ export interface StudyCard {
   intervals: Intervals; // 응답별 다음 복습까지(ms). 답 버튼에 보여 준다
 }
 
-function countIntroducedToday(db: Db, now: Date): number {
+// 큐와 수는 모두 그 사용자의 카드만 센다(M6-2).
+function countIntroducedToday(db: Db, userId: string, now: Date): number {
   const row = db
     .select({ total: count() })
     .from(words)
-    .where(gte(words.introducedAt, startOfLocalDay(now)))
+    .where(and(eq(words.userId, userId), gte(words.introducedAt, startOfLocalDay(now))))
     .get();
   return row?.total ?? 0;
 }
 
-function dueReviews(db: Db, now: Date): WordRow[] {
+function dueReviews(db: Db, userId: string, now: Date): WordRow[] {
   return db
     .select()
     .from(words)
-    .where(and(ne(words.state, NEW_STATE), lte(words.due, now)))
+    .where(and(eq(words.userId, userId), ne(words.state, NEW_STATE), lte(words.due, now)))
     .orderBy(asc(words.due), asc(words.id))
     .all();
 }
 
-function newCards(db: Db, limit: number): WordRow[] {
+function newCards(db: Db, userId: string, limit: number): WordRow[] {
   if (limit <= 0) return [];
   return db
     .select()
     .from(words)
-    .where(eq(words.state, NEW_STATE))
+    .where(and(eq(words.userId, userId), eq(words.state, NEW_STATE)))
     .orderBy(asc(words.createdAt), asc(words.id))
     .limit(limit)
     .all();
@@ -94,9 +95,9 @@ function usagesByWord(db: Db, wordIds: number[]): Map<number, Usage[]> {
 }
 
 // 오늘의 큐: 복습할 때가 된 카드(due 순) + 새 카드(만든 순, 하루 상한까지). 스펙 8.6.
-export function getStudyQueue(db: Db, now: Date, dailyNewLimit: number): StudyCard[] {
-  const slots = newCardSlots(dailyNewLimit, countIntroducedToday(db, now));
-  const picked = [...dueReviews(db, now), ...newCards(db, slots)];
+export function getStudyQueue(db: Db, userId: string, now: Date, dailyNewLimit: number): StudyCard[] {
+  const slots = newCardSlots(dailyNewLimit, countIntroducedToday(db, userId, now));
+  const picked = [...dueReviews(db, userId, now), ...newCards(db, userId, slots)];
   const usages = usagesByWord(db, picked.map((w) => w.id));
   return picked.map((w) => ({
     wordId: w.id,
@@ -110,6 +111,7 @@ export function getStudyQueue(db: Db, now: Date, dailyNewLimit: number): StudyCa
 
 export function countStudyToday(
   db: Db,
+  userId: string,
   now: Date,
   dailyNewLimit: number,
 ): { review: number; fresh: number } {
@@ -117,11 +119,15 @@ export function countStudyToday(
     db
       .select({ total: count() })
       .from(words)
-      .where(and(ne(words.state, NEW_STATE), lte(words.due, now)))
+      .where(and(eq(words.userId, userId), ne(words.state, NEW_STATE), lte(words.due, now)))
       .get()?.total ?? 0;
   const waiting =
-    db.select({ total: count() }).from(words).where(eq(words.state, NEW_STATE)).get()?.total ?? 0;
-  const slots = newCardSlots(dailyNewLimit, countIntroducedToday(db, now));
+    db
+      .select({ total: count() })
+      .from(words)
+      .where(and(eq(words.userId, userId), eq(words.state, NEW_STATE)))
+      .get()?.total ?? 0;
+  const slots = newCardSlots(dailyNewLimit, countIntroducedToday(db, userId, now));
   return { review, fresh: Math.min(waiting, slots) };
 }
 
@@ -177,12 +183,17 @@ function restore(s: CardSnapshot) {
 // logId는 이 응답의 기록 id다. 직전 응답 되돌리기(undoAnswer)에 쓴다.
 export function recordAnswer(
   db: Db,
+  userId: string,
   wordId: number,
   answer: Answer,
   now: Date,
 ): { due: Date; intervals: Intervals; logId: number } {
   return db.transaction((tx) => {
-    const word = tx.select().from(words).where(eq(words.id, wordId)).get();
+    const word = tx
+      .select()
+      .from(words)
+      .where(and(eq(words.id, wordId), eq(words.userId, userId)))
+      .get();
     if (!word) throw new StudyError('카드를 찾을 수 없습니다.');
     const next = applyAnswer(word, answer, now);
     tx.update(words)
@@ -200,9 +211,15 @@ export function recordAnswer(
 
 // 직전 응답 되돌리기: 카드를 응답 전 상태로 되돌리고 그 기록을 지운다.
 // 그 카드의 가장 최근 기록만 되돌린다(다른 탭에서 또 답했으면 거부). 되돌린 카드의 wordId를 돌려준다.
-export function undoAnswer(db: Db, logId: number): { wordId: number } {
+export function undoAnswer(db: Db, userId: string, logId: number): { wordId: number } {
   return db.transaction((tx) => {
-    const log = tx.select().from(reviewLogs).where(eq(reviewLogs.id, logId)).get();
+    // 그 사용자의 카드에 남긴 기록만 되돌린다. 남의 기록 id는 "없음"과 같다.
+    const log = tx
+      .select(getTableColumns(reviewLogs))
+      .from(reviewLogs)
+      .innerJoin(words, eq(words.id, reviewLogs.wordId))
+      .where(and(eq(reviewLogs.id, logId), eq(words.userId, userId)))
+      .get();
     if (!log) throw new StudyError('되돌릴 응답이 없습니다.');
     if (log.prevCard === null) throw new StudyError('이 응답은 되돌릴 수 없습니다.');
     const latest = tx

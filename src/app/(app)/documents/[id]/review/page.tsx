@@ -16,14 +16,14 @@ export default function ReviewPage({ params }: PageProps<"/documents/[id]/review
 }
 
 async function Review({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
 
   const db = getDb();
-  const doc = getDocument(db, id);
+  const doc = getDocument(db, user.id, id);
   if (!doc) notFound();
-  const candidates = listCandidates(db, id);
+  const candidates = listCandidates(db, user.id, id);
 
   return (
     <main className="mx-auto w-full max-w-[1200px] pb-10">

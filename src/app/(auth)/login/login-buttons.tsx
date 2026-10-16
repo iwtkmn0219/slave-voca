@@ -1,5 +1,6 @@
 "use client";
 
+import { Failed } from "@/components/ui/status";
 import { useState } from "react";
 import { GoogleButton } from "@/components/auth/google-button";
 import { buttonClass } from "@/components/ui/button";
@@ -73,7 +74,11 @@ export function DevLoginForm({ next }: { next: string }) {
       <button type="submit" className={buttonClass({ variant: "secondary" })}>
         들어가기
       </button>
-      {message && <p className="text-sm text-again">{message}</p>}
+      {message && (
+        <p role="alert">
+          <Failed>{message}</Failed>
+        </p>
+      )}
     </form>
   );
 }
