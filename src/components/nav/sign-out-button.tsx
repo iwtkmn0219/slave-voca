@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { buttonClass } from "@/components/ui/button";
+import { Failed } from "@/components/ui/status";
 import { succeeded } from "@/lib/auth/attempt";
 import { authClient } from "@/lib/auth/client";
 
@@ -40,8 +41,8 @@ export function SignOutButton({ variant = "button" }: { variant?: "button" | "me
   return (
     <span className="inline-flex flex-col items-end gap-1">
       {button}
-      <span role="alert" className="text-xs text-again">
-        로그아웃하지 못했습니다. 다시 시도해 주세요.
+      <span role="alert">
+        <Failed>로그아웃하지 못했습니다</Failed>
       </span>
     </span>
   );
