@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { addUser, USER } from '../helpers/users';
 import { createDb, type Db } from '@/server/db/client';
 import { words } from '@/server/db/schema';
 import { listOccurrencesByDocument, saveReviewSelection } from '@/server/repo/cards';
@@ -9,10 +10,11 @@ import { enrichDocument, type EnrichDeps } from '@/server/services/enrich';
 let db: Db;
 beforeEach(() => {
   db = createDb(':memory:');
+  addUser(db);
 });
 
 function savedDocument(lemmas: string[]) {
-  const doc = createDocument(db, { title: 'Paper', kind: 'paper' });
+  const doc = createDocument(db, USER, { title: 'Paper', kind: 'paper' });
   replaceCandidates(
     db,
     doc.id,
@@ -26,8 +28,8 @@ function savedDocument(lemmas: string[]) {
     })),
   );
   updateDocumentStatus(db, doc.id, 'reviewing');
-  const ids = listCandidates(db, doc.id).map((c) => c.id);
-  return { doc, saved: saveReviewSelection(db, doc.id, ids) };
+  const ids = listCandidates(db, USER, doc.id).map((c) => c.id);
+  return { doc, saved: saveReviewSelection(db, USER, doc.id, ids) };
 }
 
 const deps = (overrides: Partial<EnrichDeps> = {}): EnrichDeps => ({
@@ -39,24 +41,24 @@ const deps = (overrides: Partial<EnrichDeps> = {}): EnrichDeps => ({
 describe('enrichDocument', () => {
   it('fills meanings and phonetics, then marks the document done', async () => {
     const { doc, saved } = savedDocument(['robust', 'paradigm']);
-    await enrichDocument(db, doc.id, saved, deps());
+    await enrichDocument(db, USER, doc.id, saved, deps());
 
-    expect(listOccurrencesByDocument(db, doc.id)).toMatchObject([
+    expect(listOccurrencesByDocument(db, USER, doc.id)).toMatchObject([
       { lemma: 'paradigm', meaningKo: 'paradigm의 뜻', meaningStatus: 'done', phonetic: null },
       { lemma: 'robust', meaningKo: 'robust의 뜻', meaningStatus: 'done', phonetic: '/rəʊˈbʌst/' },
     ]);
-    expect(getDocument(db, doc.id)?.status).toBe('done');
+    expect(getDocument(db, USER, doc.id)?.status).toBe('done');
   });
 
   it('marks every meaning failed when there is no API key', async () => {
     const { doc, saved } = savedDocument(['robust']);
-    await enrichDocument(db, doc.id, saved, deps({ meaningModel: null }));
+    await enrichDocument(db, USER, doc.id, saved, deps({ meaningModel: null }));
 
-    expect(listOccurrencesByDocument(db, doc.id)[0]).toMatchObject({
+    expect(listOccurrencesByDocument(db, USER, doc.id)[0]).toMatchObject({
       meaningStatus: 'failed',
       phonetic: '/rəʊˈbʌst/',
     });
-    expect(getDocument(db, doc.id)?.status).toBe('done');
+    expect(getDocument(db, USER, doc.id)?.status).toBe('done');
   });
 
   it('marks the document error and pending meanings failed when enrichment throws', async () => {
@@ -65,13 +67,13 @@ describe('enrichDocument', () => {
     const broken = deps({
       meaningModel: async (batch) => batch.map((r) => ({ id: r.id }) as { id: number; meaningKo: string }),
     });
-    await enrichDocument(db, doc.id, saved, broken);
+    await enrichDocument(db, USER, doc.id, saved, broken);
 
-    expect(getDocument(db, doc.id)).toMatchObject({
+    expect(getDocument(db, USER, doc.id)).toMatchObject({
       status: 'error',
       errorMessage: '뜻과 발음을 채우지 못했습니다.',
     });
-    const rows = listOccurrencesByDocument(db, doc.id);
+    const rows = listOccurrencesByDocument(db, USER, doc.id);
     expect(rows.map((r) => r.meaningStatus)).toEqual(['failed', 'failed']);
     expect(db.select().from(words).all()).toHaveLength(2); // 저장된 카드는 그대로 둔다
   });
@@ -80,6 +82,7 @@ describe('enrichDocument', () => {
     const { doc, saved } = savedDocument(['robust']);
     await enrichDocument(
       db,
+      USER,
       doc.id,
       saved,
       deps({
@@ -89,16 +92,17 @@ describe('enrichDocument', () => {
       }),
     );
 
-    expect(getDocument(db, doc.id)?.status).toBe('error');
-    expect(listOccurrencesByDocument(db, doc.id)[0].meaningStatus).toBe('done');
+    expect(getDocument(db, USER, doc.id)?.status).toBe('error');
+    expect(listOccurrencesByDocument(db, USER, doc.id)[0].meaningStatus).toBe('done');
   });
 
   it('skips phonetic lookups for words that already have one', async () => {
-    db.insert(words).values({ lemma: 'robust', phonetic: '/old/' }).run();
+    db.insert(words).values({ userId: USER, lemma: 'robust', phonetic: '/old/' }).run();
     const { doc, saved } = savedDocument(['robust']);
     const looked: string[] = [];
     await enrichDocument(
       db,
+      USER,
       doc.id,
       saved,
       deps({
@@ -109,6 +113,6 @@ describe('enrichDocument', () => {
       }),
     );
     expect(looked).toEqual([]);
-    expect(listOccurrencesByDocument(db, doc.id)[0].phonetic).toBe('/old/');
+    expect(listOccurrencesByDocument(db, USER, doc.id)[0].phonetic).toBe('/old/');
   });
 });

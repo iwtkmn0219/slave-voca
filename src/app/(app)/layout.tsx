@@ -14,7 +14,7 @@ async function TodayBadge() {
   const user = await getSessionUser();
   if (user?.status !== "approved") return null;
   const db = getDb();
-  const { review, fresh } = countStudyToday(db, new Date(), getSettings(db).dailyNewLimit);
+  const { review, fresh } = countStudyToday(db, user.id, new Date(), getSettings(db, user.id).dailyNewLimit);
   const total = review + fresh;
   if (total === 0) return null;
   return <span className="text-xs font-semibold text-accent tabular-nums">{total}</span>;

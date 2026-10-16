@@ -1,8 +1,9 @@
 import { DAILY_NEW_LIMIT_RANGE, EXCLUDE_TOP_N_RANGE } from '@/lib/settings';
+import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { settings } from '../db/schema';
 
-// DB에 두는 설정. 화면 테마는 첫 화면이 번쩍이지 않도록 쿠키에 둔다(설정 화면 Action이 함께 저장).
+// DB에 두는 사용자별 설정. 화면 테마는 첫 화면이 번쩍이지 않도록 쿠키에 둔다(설정 화면 Action이 함께 저장).
 export interface Settings {
   excludeTopN: number;
   dailyNewLimit: number;
@@ -18,8 +19,10 @@ const KEYS: Record<keyof Settings, string> = {
 };
 
 // 없거나 범위 밖인 값은 처음 값으로 읽는다.
-export function getSettings(db: Db): Settings {
-  const stored = new Map(db.select().from(settings).all().map((r) => [r.key, r.value]));
+export function getSettings(db: Db, userId: string): Settings {
+  const stored = new Map(
+    db.select().from(settings).where(eq(settings.userId, userId)).all().map((r) => [r.key, r.value]),
+  );
   const readInt = (key: 'excludeTopN' | 'dailyNewLimit', range: { min: number; max: number }) => {
     const raw = stored.get(KEYS[key]);
     // 숫자만 받는다. Number('')는 0이라, 빈 값이 하루 새 카드 0으로 읽히지 않게 한다.
@@ -35,11 +38,14 @@ export function getSettings(db: Db): Settings {
 }
 
 // 검사를 마친 값만 받는다(lib/settings의 parseSettingsInput). 한 트랜잭션에서 모두 쓴다.
-export function saveSettings(db: Db, value: Settings): void {
+export function saveSettings(db: Db, userId: string, value: Settings): void {
   db.transaction((tx) => {
     for (const key of Object.keys(KEYS) as (keyof Settings)[]) {
-      const row = { key: KEYS[key], value: String(value[key]) };
-      tx.insert(settings).values(row).onConflictDoUpdate({ target: settings.key, set: { value: row.value } }).run();
+      const row = { userId, key: KEYS[key], value: String(value[key]) };
+      tx.insert(settings)
+        .values(row)
+        .onConflictDoUpdate({ target: [settings.userId, settings.key], set: { value: row.value } })
+        .run();
     }
   });
 }

@@ -47,19 +47,19 @@ export function defaultTitle(fileName: string): string {
 }
 
 // 업로드 검증 → 문서 생성 → 문장 추출 → 후보 저장. 처리 실패는 문서 상태(error)로 남긴다.
-export async function ingestPdf(db: Db, input: IngestInput): Promise<IngestResult> {
+export async function ingestPdf(db: Db, userId: string, input: IngestInput): Promise<IngestResult> {
   validateUpload(input.bytes);
   const title = input.title.trim() || defaultTitle(input.fileName);
-  const doc = createDocument(db, { title, kind: input.kind });
+  const doc = createDocument(db, userId, { title, kind: input.kind });
 
   try {
     const sentences = await parsePdf(input.bytes, { isKnownWord: isFrequentWord, isRealWord });
-    const settings = getSettings(db);
+    const settings = getSettings(db, userId);
     const found = extractCandidates(sentences, {
       excludeTopN: settings.excludeTopN,
       rankOf,
-      knownLemmas: listKnownLemmas(db),
-      existingLemmas: listWordLemmas(db),
+      knownLemmas: listKnownLemmas(db, userId),
+      existingLemmas: listWordLemmas(db, userId),
       inDictionary,
     });
     replaceCandidates(db, doc.id, found);

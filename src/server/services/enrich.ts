@@ -38,8 +38,8 @@ export function defaultEnrichDeps(): EnrichDeps {
 
 // 용례들의 뜻을 만들어 저장한다. 성공은 done, 실패는 failed. 저장 직후 채우기와 다시 만들기가 함께 쓴다.
 // 이미 뜻이 있던 용례(done)는 새로 만들다 실패해도 원래 뜻을 그대로 둔다.
-async function generateAndStore(db: Db, occurrenceIds: readonly number[], model: MeaningModel) {
-  const rows = listMeaningRequests(db, occurrenceIds);
+async function generateAndStore(db: Db, userId: string, occurrenceIds: readonly number[], model: MeaningModel) {
+  const rows = listMeaningRequests(db, userId, occurrenceIds);
   const hadMeaning = new Set(rows.filter((r) => r.meaningStatus === 'done').map((r) => r.id));
   const outcome = await generateMeanings(
     rows.map((r) => ({ id: r.id, word: r.lemma, sentence: r.sentence })),
@@ -51,26 +51,28 @@ async function generateAndStore(db: Db, occurrenceIds: readonly number[], model:
   return { done: outcome.done.length, failed: outcome.failedIds.length };
 }
 
-async function fillMeanings(db: Db, occurrenceIds: number[], model: MeaningModel | null) {
+async function fillMeanings(db: Db, userId: string, occurrenceIds: number[], model: MeaningModel | null) {
   if (!model) {
-    markMeaningsFailed(db, listMeaningRequests(db, occurrenceIds).map((r) => r.id));
+    markMeaningsFailed(db, listMeaningRequests(db, userId, occurrenceIds).map((r) => r.id));
     return;
   }
-  await generateAndStore(db, occurrenceIds, model);
+  await generateAndStore(db, userId, occurrenceIds, model);
 }
 
 export type RegenerateResult = { error: 'missing-key' } | { error: null; done: number; failed: number };
 
 // 뜻 다시 만들기: 실패한 뜻을 채우거나, 이상한 뜻을 새로 받는다(단어 하나 또는 여러 개).
 // 키가 없으면 아무것도 바꾸지 않고 알린다.
+// 그 사용자의 용례만 다시 만든다(남의 id는 listMeaningRequests에서 빠진다).
 export async function regenerateMeanings(
   db: Db,
+  userId: string,
   occurrenceIds: readonly number[],
   model: MeaningModel | null,
 ): Promise<RegenerateResult> {
   if (!model) return { error: 'missing-key' };
   if (occurrenceIds.length === 0) return { error: null, done: 0, failed: 0 };
-  return { error: null, ...(await generateAndStore(db, occurrenceIds, model)) };
+  return { error: null, ...(await generateAndStore(db, userId, occurrenceIds, model)) };
 }
 
 async function fillPhonetics(db: Db, wordIds: number[], lookup: EnrichDeps['lookupPhonetic']) {
@@ -87,12 +89,13 @@ const ENRICH_FAILED_MESSAGE = '뜻과 발음을 채우지 못했습니다.';
 // 예상하지 못한 예외가 나도 문서가 processing에 멈추지 않게 error로 끝내고, 남은 뜻은 failed로 둔다.
 export async function enrichDocument(
   db: Db,
+  userId: string,
   documentId: number,
   saved: SavedCards,
   deps: EnrichDeps,
 ): Promise<void> {
   const results = await Promise.allSettled([
-    fillMeanings(db, saved.occurrenceIds, deps.meaningModel),
+    fillMeanings(db, userId, saved.occurrenceIds, deps.meaningModel),
     fillPhonetics(db, saved.wordIds, deps.lookupPhonetic),
   ]);
   const failures = results.filter((r) => r.status === 'rejected');

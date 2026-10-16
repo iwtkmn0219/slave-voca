@@ -18,8 +18,8 @@ export default function SettingsPage() {
 }
 
 async function CurrentSettings() {
-  await requireUser();
-  const settings = getSettings(getDb());
+  const user = await requireUser();
+  const settings = getSettings(getDb(), user.id);
   const stored = (await cookies()).get(THEME_COOKIE)?.value;
   return <SettingsForm initial={{ ...settings, theme: isTheme(stored) ? stored : "system" }} />;
 }

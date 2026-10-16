@@ -15,19 +15,19 @@ export async function saveReview(
   documentId: unknown,
   selectedCandidateIds: unknown,
 ): Promise<{ error: string }> {
-  await requireUser();
+  const user = await requireUser();
   const ids = parseIdList(selectedCandidateIds);
   if (!isId(documentId) || ids === null) return { error: "잘못된 요청입니다." };
   const db = getDb();
   let saved: SavedCards;
   try {
-    saved = saveReviewSelection(db, documentId, ids);
+    saved = saveReviewSelection(db, user.id, documentId, ids);
   } catch (err) {
     if (err instanceof ReviewError) return { error: err.message };
     throw err;
   }
 
-  await enrichDocument(db, documentId, saved, defaultEnrichDeps());
+  await enrichDocument(db, user.id, documentId, saved, defaultEnrichDeps());
   revalidatePath("/documents");
   redirect(`/documents/${documentId}`);
 }

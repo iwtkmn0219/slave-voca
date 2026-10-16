@@ -14,7 +14,7 @@ export async function uploadDocument(
   _prev: UploadState,
   formData: FormData,
 ): Promise<UploadState> {
-  await requireUser();
+  const user = await requireUser();
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { error: "PDF 파일을 선택하세요." };
@@ -24,7 +24,7 @@ export async function uploadDocument(
 
   let result: IngestResult;
   try {
-    result = await ingestPdf(getDb(), {
+    result = await ingestPdf(getDb(), user.id, {
       fileName: file.name,
       title,
       kind,

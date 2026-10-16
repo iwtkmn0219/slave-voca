@@ -20,15 +20,15 @@ export default function DocumentWordsPage({ params }: PageProps<"/documents/[id]
 }
 
 async function DocumentWords({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
 
   const db = getDb();
-  const doc = getDocument(db, id);
+  const doc = getDocument(db, user.id, id);
   if (!doc) notFound();
-  const rows = listOccurrencesByDocument(db, id);
-  const usage = countOccurrencesByWord(db, rows.map((r) => r.wordId));
+  const rows = listOccurrencesByDocument(db, user.id, id);
+  const usage = countOccurrencesByWord(db, user.id, rows.map((r) => r.wordId));
   const failed = rows.filter((r) => r.meaningStatus === "failed").length;
   const missingKey = !process.env.GEMINI_API_KEY;
 
