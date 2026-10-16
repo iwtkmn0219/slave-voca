@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C단계 화면 목업</title>
+<!-- 목업 전용 글꼴 로딩. 실제 구현은 지금처럼 next/font로 자체 호스팅한다 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gentium+Book+Plus:ital,wght@0,400;0,700;1,400&display=swap&subset=greek">
+<style>
+/* ── 토큰: src/app/globals.css와 같은 값 ── */
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f4f1ea, #171614);
+  --surface: light-dark(#fbfaf7, #1f1e1b);
+  --sunken: light-dark(#eeeae1, #141311);
+  --line: light-dark(#e2ddd2, #2f2d29);
+  --line-strong: light-dark(#cec7b8, #403d37);
+  --ink: light-dark(#22201c, #ece7dd);
+  --ink-2: light-dark(#4a463f, #cfc9bd);
+  --muted: light-dark(#6e685e, #a29b8e);
+  --faint: light-dark(#857e72, #807a70);
+  --accent: light-dark(#2f5d8c, #8db4de);
+  --accent-soft: light-dark(#e6edf5, #223041);
+  --on-accent: light-dark(#ffffff, #10161e);
+  --mark: light-dark(#f0db8c, rgb(222 178 64 / 0.32));
+  --again: light-dark(#a6463b, #e08a7e);
+  --again-soft: light-dark(#f5e3df, #3a2421);
+  --hard: light-dark(#7f5a0c, #d9b45e);
+  --hard-soft: light-dark(#f3e9d0, #352b16);
+  --good: light-dark(#3b7150, #8cc79c);
+  --good-soft: light-dark(#e0eee4, #1e3225);
+  --shadow-1: 0 1px 2px light-dark(rgb(34 32 28 / 0.06), rgb(0 0 0 / 0.4)), 0 1px 1px light-dark(rgb(34 32 28 / 0.04), transparent);
+  --shadow-2: 0 4px 16px light-dark(rgb(34 32 28 / 0.08), transparent), 0 1px 3px light-dark(rgb(34 32 28 / 0.06), transparent), 0 6px 20px light-dark(transparent, rgb(0 0 0 / 0.45));
+  --font-ui: "Pretendard Variable", Pretendard, system-ui, sans-serif;
+  --font-en: "Gentium Book Plus", "Noto Serif", Georgia, serif;
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.6 var(--font-ui); word-break: keep-all; -webkit-font-smoothing: antialiased; }
+.en { font-family: var(--font-en); }
+.num { font-variant-numeric: tabular-nums; }
+mark { background: linear-gradient(transparent 55%, var(--mark) 55%); color: inherit; padding: 0 1px; font-weight: 700; }
+button { font: inherit; color: inherit; }
+kbd { font: 500 11px/1 var(--font-ui); color: var(--muted); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; background: var(--surface); }
+
+/* 목업 틀 */
+.doc-head { max-width: 1240px; margin: 0 auto; padding: 32px 16px 8px; }
+.doc-head h1 { font-size: 22px; margin: 0 0 4px; }
+.doc-head p { margin: 0; color: var(--muted); font-size: 14px; }
+.part { max-width: 1240px; margin: 56px auto 0; padding: 0 16px; font-size: 18px; font-weight: 700; border-top: 1px solid var(--line-strong); padding-top: 20px; }
+.label { max-width: 1240px; margin: 28px auto 10px; padding: 0 16px; font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.label b { color: var(--ink); font-size: 15px; }
+.row { max-width: 1240px; margin: 0 auto; padding: 0 16px; display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.cap { font-size: 12px; color: var(--muted); margin: 0 0 6px; max-width: 390px; }
+.frame { max-width: 1208px; margin: 0 auto; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow-2); }
+@media (max-width: 1240px) { .frame { margin: 0 16px; } }
+
+/* ── 휴대폰 틀: 390×844 (iPhone 14/15), 360×740 (작은 Android) ── */
+.phone { position: relative; width: 390px; height: 844px; border: 1px solid var(--line-strong); border-radius: 22px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow-2); flex: none; display: flex; flex-direction: column; }
+.phone.s { width: 360px; height: 740px; }
+.phone .scroll { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+/* 상단 바: 640px 아래에서는 작업명을 숨기고 간격을 줄인다 */
+.mnav { height: 52px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.mnav a { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 7px; font-size: 14px; color: var(--ink-2); text-decoration: none; }
+.mnav a[aria-current] { background: var(--sunken); font-weight: 600; color: var(--ink); }
+.mnav .badge { font-size: 12px; font-weight: 600; color: var(--accent); }
+.mnav .push { margin-left: auto; }
+.initial { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; flex: none; }
+.acct { display: inline-flex; align-items: center; gap: 4px; padding: 10px 6px; }
+
+/* 복습: 진행 줄 */
+.prog { display: flex; align-items: center; gap: 12px; padding: 14px 16px 0; font-size: 13px; color: var(--muted); }
+.prog .bar { flex: 1; height: 4px; border-radius: 3px; background: var(--sunken); overflow: hidden; }
+.prog .bar i { display: block; height: 100%; background: var(--accent); }
+.prog b { color: var(--ink); }
+
+/* 복습: 카드 */
+.card { margin: 12px 16px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-1); padding: 22px 20px 20px; }
+.card.front { flex: 1; margin-bottom: 12px; display: flex; flex-direction: column; } /* 앞면은 고정 줄까지 남은 높이를 다 채운다(누르는 범위) */
+
+.tag-new { display: inline-block; border-radius: 4px; padding: 1px 6px; font-size: 11.5px; font-weight: 600; background: var(--good-soft); color: var(--good); }
+.wordline { display: flex; align-items: center; gap: 10px; }
+.word { font: 700 36px/1.1 var(--font-en); letter-spacing: -.01em; overflow-wrap: anywhere; min-width: 0; }
+.word.back { font-size: 30px; }
+.word.long { font-size: 28px; }
+.word.back.long { font-size: 24px; }
+.speak { width: 40px; height: 40px; flex: none; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--surface); display: grid; place-items: center; color: var(--ink-2); position: relative; }
+.speak::after { content: ""; position: absolute; inset: -4px; } /* 누르는 범위 48px */
+.prompt { margin-top: auto; padding-top: 40px; text-align: center; font-size: 14px; color: var(--muted); }
+.ipa { font: 400 17px/1.4 var(--font-en); color: var(--muted); margin-top: 4px; }
+.use { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.use + .use { border-top-style: dashed; margin-top: 14px; padding-top: 14px; }
+.use .m { font-size: 20px; line-height: 1.45; font-weight: 700; }
+.use + .use .m { font-size: 16px; }
+.use .s { font: 400 16.5px/1.6 var(--font-en); color: var(--ink-2); margin-top: 8px; }
+.use + .use .s { font-size: 15px; }
+.use .src { margin-top: 8px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.use .src i { font-family: var(--font-en); font-size: 13.5px; }
+.use .act { margin-top: 6px; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0 6px; align-items: center; min-height: 20px; }
+.dotted { color: var(--muted); text-decoration: underline dotted; text-underline-offset: 3px; background: none; border: 0; padding: 0; font-size: 13px; position: relative; }
+.dotted::after { content: ""; position: absolute; inset: -12px -8px; } /* 누르는 범위 44px 이상, 모양은 그대로 */
+.busy-m { opacity: .5; }
+.spin { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--accent); border-right-color: transparent; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.failed, .limited { display: inline-flex; align-items: baseline; gap: 6px; color: var(--muted); }
+.failed::before { content: ""; flex: none; width: 10px; border-top: 2px dashed var(--again); transform: translateY(-4px); }
+.limited::before { content: ""; flex: none; width: 10px; border-top: 2px solid var(--hard); transform: translateY(-4px); }
+
+/* 복습: 아래 고정 줄(sticky). 엄지가 닿는 곳에 답 버튼을 둔다 */
+.dock { flex: none; background: var(--bg); border-top: 1px solid var(--line); padding: 8px 16px calc(12px + 20px); } /* 20px = 목업의 safe-area 자리 */
+.dock .meta { min-height: 32px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; color: var(--muted); flex-wrap: wrap; text-align: center; }
+.dock .meta .w { font-family: var(--font-en); color: var(--ink-2); }
+.reveal { width: 100%; height: 52px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); font-size: 16px; font-weight: 600; }
+.answers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ans { height: 60px; border: 0; border-radius: 10px; display: grid; place-content: center; gap: 1px; }
+.ans b { font-size: 16px; }
+.ans span { font-size: 12px; opacity: .8; }
+.ans.again { background: var(--again-soft); color: var(--again); }
+.ans.hard { background: var(--hard-soft); color: var(--hard); }
+.ans.good { background: var(--good-soft); color: var(--good); }
+.ans:disabled { opacity: .55; }
+.c-again { color: var(--again); } .c-hard { color: var(--hard); } .c-good { color: var(--good); }
+
+/* 끝·빈 화면 */
+.end { padding: 72px 24px 0; text-align: center; }
+.end h2 { font-size: 22px; margin: 0; }
+.end .stats { margin-top: 14px; display: flex; justify-content: center; gap: 18px; font-size: 14px; color: var(--ink-2); }
+.end .soon { margin-top: 10px; font-size: 14px; color: var(--muted); }
+.end p.sub { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 7px; border: 1px solid; font-weight: 600; text-decoration: none; }
+.btn.md { padding: 8px 14px; font-size: 14px; }
+.btn.lg { height: 48px; padding: 0 18px; font-size: 15px; width: 100%; }
+.btn.sm { padding: 4px 10px; font-size: 13px; }
+.btn.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.btn.secondary { border-color: var(--line-strong); background: var(--surface); color: var(--ink); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
+.btn:disabled { opacity: .55; }
+
+/* ── PC 부품 ── */
+.notice { margin: 0; border-left: 3px solid var(--hard); border-radius: 0 7px 7px 0; background: var(--surface); padding: 10px 14px; font-size: 13px; color: var(--ink-2); }
+.nav { height: 52px; display: flex; align-items: center; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.nav .brand { font-size: 13px; font-weight: 600; color: var(--muted); margin-right: 20px; letter-spacing: .02em; }
+.nav a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 7px; font-size: 14px; color: var(--ink-2); text-decoration: none; }
+.nav a[aria-current] { background: var(--sunken); font-weight: 600; color: var(--ink); }
+.nav .badge { font-size: 12px; font-weight: 600; color: var(--accent); }
+.nav .push { margin-left: auto; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.dot.wait { background: var(--accent); } .dot.ok { background: var(--good); } .dot.idle { background: var(--faint); } .dot.hard { background: var(--hard); }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td.num, td.r { white-space: nowrap; }
+td { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+.tbl { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-1); }
+td .n { font-weight: 600; } td .e { font-size: 13px; color: var(--muted); }
+.r { text-align: right; }
+.usage { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-1); padding: 14px 18px; margin: 0 0 16px; }
+.usage .k { font-size: 12px; font-weight: 600; color: var(--muted); }
+.usage .v { font-size: 20px; font-weight: 700; }
+.usage .v small { font-size: 14px; font-weight: 500; color: var(--muted); }
+.meter { flex: 1 1 200px; height: 4px; border-radius: 3px; background: var(--sunken); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); }
+.meter.warn i { background: var(--hard); } .meter.full i { background: var(--again); }
+.usage .note { flex-basis: 100%; font-size: 12.5px; color: var(--muted); margin-top: -6px; }
+</style>
+</head>
+<body>
+<script>if(location.hash==="#dark"||location.hash==="#light")document.documentElement.dataset.theme=location.hash.slice(1)</script>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="spk" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></g></symbol>
+</svg>
+
+<header class="doc-head">
+  <h1>C단계 화면 목업: 휴대폰 복습(C-3) · 사용량 한도(C-1)</h1>
+  <p>주소 끝에 #light / #dark를 붙이면 테마를 고정한다. 규칙은 docs/superpowers/specs/2026-10-17-c-screens.md.</p>
+</header>
+
+<!-- ═════════ C-3 휴대폰 복습 ═════════ -->
+<h2 class="part">C-3 휴대폰 복습 (640px 아래)</h2>
+
+<div class="label"><b>1. 앞면 · 뒷면</b> 답 버튼과 뒷면 보기는 화면 아래 고정 줄(엄지 자리). 카드를 눌러도 뒷면이 열린다</div>
+<div class="row">
+  <div><p class="cap">1-1 앞면 390×844. 단축키 표시 없음(터치 기기). 되돌릴 것이 없으면 위 줄은 비워 두되 높이는 유지</p>
+  <div class="phone">
+    <nav class="mnav"><a href="#">홈</a><a href="#" aria-current="page">복습 <span class="badge">19</span></a><a href="#">문서</a><a href="#" class="push">설정</a><span class="acct"><span class="initial">김</span></span></nav>
+    <div class="scroll">
+      <div class="prog"><span class="num">3 / 22</span><span class="bar"><i style="width:14%"></i></span><span>남은 <b class="num">19</b></span></div>
+      <section class="card front">
+        <div><span class="tag-new">새 카드</span></div>
+        <div class="wordline" style="margin-top:14px"><h3 class="word" style="margin:0">residual</h3><span class="speak"><svg width="18" height="18"><use href="#spk"/></svg></span></div>
+        <p class="prompt">이 문서에서 어떤 뜻이었는지 떠올려 보세요<br><span style="font-size:12.5px">카드를 누르거나 아래 버튼</span></p>
+      </section>
+    </div>
+    <div class="dock">
+      <div class="meta"></div>
+      <button class="reveal">뒷면 보기</button>
+    </div>
+  </div></div>
+
+  <div><p class="cap">1-2 뒷면 390×844. 용례 둘. 직전 응답 되돌리기는 답 버튼 바로 위</p>
+  <div class="phone">
+    <nav class="mnav"><a href="#">홈</a><a href="#" aria-current="page">복습 <span class="badge">19</span></a><a href="#">문서</a><a href="#" class="push">설정</a><span class="acct"><span class="initial">김</span></span></nav>
+    <div class="scroll">
+      <div class="prog"><span class="num">3 / 22</span><span class="bar"><i style="width:14%"></i></span><span>남은 <b class="num">19</b></span></div>
+      <section class="card">
+        <div class="wordline"><h3 class="word back" style="margin:0">residual</h3><span class="speak"><svg width="18" height="18"><use href="#spk"/></svg></span></div>
+        <div class="ipa">/rɪˈzɪdʒuəl/</div>
+        <div class="use">
+          <div class="m">입력을 그대로 더해 주는 (잔차)</div>
+          <p class="s" style="margin-bottom:0">We reformulate the layers as learning <mark>residual</mark> functions with reference to the layer inputs, instead of learning unreferenced functions.</p>
+          <div class="src">— <i>Deep Residual Learning for Image Recognition</i></div>
+          <div class="act"><button class="dotted">뜻 다시 만들기</button></div>
+        </div>
+        <div class="use">
+          <div class="m">남은, 잔여의</div>
+          <p class="s" style="margin-bottom:0">The <mark>residual</mark> error after fine-tuning remains small.</p>
+          <div class="src">— <i>Attention Is All You Need</i></div>
+          <div class="act"><button class="dotted">뜻 다시 만들기</button></div>
+        </div>
+      </section>
+    </div>
+    <div class="dock">
+      <div class="meta"><button class="dotted">되돌리기</button><span><span class="w">latent</span> · <span class="c-good">앎</span></span></div>
+      <div class="answers">
+        <button class="ans again"><b>모름</b><span>1분 뒤</span></button>
+        <button class="ans hard"><b>애매</b><span>6분 뒤</span></button>
+        <button class="ans good"><b>앎</b><span>3일 뒤</span></button>
+      </div>
+    </div>
+  </div></div>
+
+  <div><p class="cap">1-3 작은 폭 360×740. 긴 단어(13자 이상)는 한 단계 작게, 그래도 넘치면 줄바꿈</p>
+  <div class="phone s">
+    <nav class="mnav"><a href="#">홈</a><a href="#" aria-current="page">복습 <span class="badge">19</span></a><a href="#">문서</a><a href="#" class="push">설정</a><span class="acct"><span class="initial">김</span></span></nav>
+    <div class="scroll">
+      <div class="prog"><span class="num">8 / 22</span><span class="bar"><i style="width:36%"></i></span><span>남은 <b class="num">14</b></span></div>
+      <section class="card">
+        <div class="wordline"><h3 class="word back long" style="margin:0">heteroscedasticity</h3><span class="speak"><svg width="18" height="18"><use href="#spk"/></svg></span></div>
+        <div class="ipa">/ˌhɛtəroʊskədæˈstɪsɪti/</div>
+        <div class="use">
+          <div class="m">오차의 분산이 고르지 않음 (이분산성)</div>
+          <p class="s" style="margin-bottom:0">We model the <mark>heteroscedasticity</mark> of the observation noise with a learned variance head.</p>
+          <div class="src">— <i>What Uncertainties Do We Need in Bayesian Deep Learning?</i></div>
+          <div class="act"><button class="dotted">뜻 다시 만들기</button></div>
+        </div>
+      </section>
+    </div>
+    <div class="dock">
+      <div class="meta"><button class="dotted">되돌리기</button><span><span class="w">residual</span> · <span class="c-hard">애매</span></span></div>
+      <div class="answers">
+        <button class="ans again"><b>모름</b><span>1분 뒤</span></button>
+        <button class="ans hard"><b>애매</b><span>10분 뒤</span></button>
+        <button class="ans good"><b>앎</b><span>1일 뒤</span></button>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<div class="label"><b>2. 상태</b> 다시 만들기(진행 중 · 실패 · 한도), 저장 중, 저장 실패, 되돌린 뒤</div>
+<div class="row">
+  <div><p class="cap">2-1 다시 만드는 중(첫 용례) · 한도에 걸림(둘째 용례). 저장 중: 답 버튼 흐림 + 위 줄 "저장 중"</p>
+  <div class="phone">
+    <nav class="mnav"><a href="#">홈</a><a href="#" aria-current="page">복습 <span class="badge">19</span></a><a href="#">문서</a><a href="#" class="push">설정</a><span class="acct"><span class="initial">김</span></span></nav>
+    <div class="scroll">
+      <div class="prog"><span class="num">3 / 22</span><span class="bar"><i style="width:14%"></i></span><span>남은 <b class="num">19</b></span></div>
+      <section class="card">
+        <div class="wordline"><h3 class="word back" style="margin:0">residual</h3><span class="speak"><svg width="18" height="18"><use href="#spk"/></svg></span></div>
+        <div class="ipa">/rɪˈzɪdʒuəl/</div>
+        <div class="use">
+          <div class="m busy-m">입력을 그대로 더해 주는 (잔차)</div>
+          <p class="s" style="margin-bottom:0">We reformulate the layers as learning <mark>residual</mark> functions with reference to the layer inputs.</p>
+          <div class="src">— <i>Deep Residual Learning for Image Recognition</i></div>
+          <div class="act" aria-live="polite"><span class="spin"></span>다시 만드는 중</div>
+        </div>
+        <div class="use">
+          <div class="m">남은, 잔여의</div>
+          <p class="s" style="margin-bottom:0">The <mark>residual</mark> error after fine-tuning remains small.</p>
+          <div class="src">— <i>Attention Is All You Need</i></div>
+          <div class="act" aria-live="polite"><span class="limited">이번 달 사용량을 다 써서 뜻을 만들 수 없습니다. 11월 1일부터 다시 만들 수 있고, 더 필요하면 관리자에게 문의해 주세요.</span></div>
+        </div>
+      </section>
+    </div>
+    <div class="dock">
+      <div class="meta" aria-live="polite"><span class="spin"></span>저장 중</div>
+      <div class="answers">
+        <button class="ans again" disabled><b>모름</b><span>1분 뒤</span></button>
+        <button class="ans hard" disabled><b>애매</b><span>6분 뒤</span></button>
+        <button class="ans good" disabled><b>앎</b><span>3일 뒤</span></button>
+      </div>
+    </div>
+  </div></div>
+
+  <div><p class="cap">2-2 다시 만들기 실패 · 저장 실패(답 버튼은 그대로, 다시 누르면 다시 시도)</p>
+  <div class="phone">
+    <nav class="mnav"><a href="#">홈</a><a href="#" aria-current="page">복습 <span class="badge">19</span></a><a href="#">문서</a><a href="#" class="push">설정</a><span class="acct"><span class="initial">김</span></span></nav>
+    <div class="scroll">
+      <div class="prog"><span class="num">3 / 22</span><span class="bar"><i style="width:14%"></i></span><span>남은 <b class="num">19</b></span></div>
+      <section class="card">
+        <div class="wordline"><h3 class="word back" style="margin:0">residual</h3><span class="speak"><svg width="18" height="18"><use href="#spk"/></svg></span></div>
+        <div class="ipa">/rɪˈzɪdʒuəl/</div>
+        <div class="use">
+          <div class="m">입력을 그대로 더해 주는 (잔차)</div>
+          <p class="s" style="margin-bottom:0">We reformulate the layers as learning <mark>residual</mark> functions with reference to the layer inputs.</p>
+          <div class="src">— <i>Deep Residual Learning for Image Recognition</i></div>
+          <div class="act"><span class="failed">다시 만들지 못했습니다</span>·<button class="dotted">다시 시도</button></div>
+        </div>
+      </section>
+    </div>
+    <div class="dock">
+      <div class="meta" role="alert"><span class="failed">응답을 저장하지 못했습니다 · 다시 눌러 주세요</span></div>
+      <div class="answers">
+        <button class="ans again"><b>모름</b><span>1분 뒤</span></button>
+        <button class="ans hard"><b>애매</b><span>6분 뒤</span></button>
+        <button class="ans good"><b>앎</b><span>3일 뒤</span></button>
+      </div>
+    </div>
+  </div></div>
+
+  <div><p class="cap">2-3 되돌린 뒤(앞면으로 돌아옴) · 되돌리기 실패는 PC와 같은 문구</p>
+  <div class="phone">
+    <nav class="mnav"><a href="#">홈</a><a href="#" aria-current="page">복습 <span class="badge">20</span></a><a href="#">문서</a><a href="#" class="push">설정</a><span class="acct"><span class="initial">김</span></span></nav>
+    <div class="scroll">
+      <div class="prog"><span class="num">2 / 22</span><span class="bar"><i style="width:9%"></i></span><span>남은 <b class="num">20</b></span></div>
+      <section class="card front">
+        <div class="wordline"><h3 class="word" style="margin:0">latent</h3><span class="speak"><svg width="18" height="18"><use href="#spk"/></svg></span></div>
+        <p class="prompt">이 문서에서 어떤 뜻이었는지 떠올려 보세요<br><span style="font-size:12.5px">카드를 누르거나 아래 버튼</span></p>
+      </section>
+    </div>
+    <div class="dock">
+      <div class="meta" aria-live="polite"><span><span class="w">latent</span> 응답을 되돌렸습니다</span></div>
+      <button class="reveal">뒷면 보기</button>
+    </div>
+  </div></div>
+</div>
+
+<div class="label"><b>3. 끝 · 빈 화면</b> 고정 줄 없이 가운데. 버튼은 폭 전체</div>
+<div class="row">
+  <div><p class="cap">3-1 오늘 복습을 마침</p>
+  <div class="phone s">
+    <nav class="mnav"><a href="#">홈</a><a href="#" aria-current="page">복습</a><a href="#">문서</a><a href="#" class="push">설정</a><span class="acct"><span class="initial">김</span></span></nav>
+    <div class="end">
+      <h2>오늘 복습을 마쳤습니다</h2>
+      <div class="stats"><span>카드 <b class="num">22</b>장</span><span>응답 <b class="num">27</b>번</span><span>모름 <b class="num c-again">5</b></span></div>
+      <p class="soon">3장은 약 4분 뒤 다시 나옵니다 · <a href="#" style="color:var(--accent);font-weight:600">다시 확인</a></p>
+      <div style="margin-top:28px"><a class="btn primary lg" href="#">홈으로</a></div>
+      <p style="margin-top:14px;font-size:13px;color:var(--muted)"><button class="dotted">마지막 응답 되돌리기</button> <span class="en" style="color:var(--ink-2)">residual</span> · <span class="c-good">앎</span></p>
+    </div>
+  </div></div>
+  <div><p class="cap">3-2 지금 복습할 카드가 없음(카드는 있음)</p>
+  <div class="phone s">
+    <nav class="mnav"><a href="#">홈</a><a href="#" aria-current="page">복습</a><a href="#">문서</a><a href="#" class="push">설정</a><span class="acct"><span class="initial">김</span></span></nav>
+    <div class="end">
+      <h2>지금 복습할 카드가 없습니다</h2>
+      <p class="sub">오늘 나올 카드를 모두 봤습니다. 내일 다시 오세요.</p>
+      <div style="margin-top:28px"><a class="btn secondary lg" href="#">홈으로</a></div>
+    </div>
+  </div></div>
+  <div><p class="cap">3-3 아직 카드가 하나도 없음</p>
+  <div class="phone s">
+    <nav class="mnav"><a href="#">홈</a><a href="#" aria-current="page">복습</a><a href="#">문서</a><a href="#" class="push">설정</a><span class="acct"><span class="initial">김</span></span></nav>
+    <div class="end">
+      <h2>아직 카드가 없습니다</h2>
+      <p class="sub">PC에서 논문 PDF를 올리고 단어를 저장하면 여기서 복습할 수 있습니다.</p>
+      <div style="margin-top:28px"><a class="btn secondary lg" href="#">문서로</a></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ═════════ C-1 사용량 한도 ═════════ -->
+<h2 class="part">C-1 사용량 한도 안내 · 관리 화면 사용량</h2>
+
+<div class="label"><b>4. 검토 화면 저장이 막힘</b> 아무것도 저장하지 않았다. 고른 단어는 그대로. 도구 줄 아래에 Notice 한 줄</div>
+<div class="frame">
+  <div style="display:flex;align-items:center;gap:12px;padding:14px 40px;border-bottom:1px solid var(--line);background:var(--surface)">
+    <span style="font-size:14px"><b class="num">212</b>개 중 <b class="num" style="color:var(--accent)">187</b>개 저장 · 해제한 <span class="num">25</span>개는 아는 단어로</span>
+    <span style="flex:1"></span>
+    <button class="btn ghost sm">보이는 행 모두 해제</button>
+    <button class="btn primary md">저장 <kbd style="color:var(--on-accent);background:transparent;border-color:color-mix(in srgb,var(--on-accent) 45%,transparent)">Ctrl Enter</kbd></button>
+  </div>
+  <div style="padding:12px 40px 20px">
+    <p class="notice" role="alert">이번 달 사용량을 다 써서 저장하지 않았습니다. 고른 단어는 그대로 있습니다. 11월 1일부터 저장할 수 있고, 더 필요하면 관리자에게 문의해 주세요.</p>
+    <p style="margin:14px 0 0;font-size:13px;color:var(--muted)">(아래로 후보 표가 이어진다)</p>
+  </div>
+</div>
+
+<div class="label"><b>5. 문서 화면 다시 만들기가 막힘</b> 한 단어는 그 행 버튼 자리에, 여러 개 · 모두 다시 시도는 화면 위 Notice</div>
+<div class="frame">
+  <div style="padding:20px 40px 8px">
+    <p class="notice" role="alert" style="margin-bottom:14px">이번 달 사용량을 다 써서 뜻을 다시 만들지 못했습니다. 원래 뜻은 그대로입니다. 11월 1일부터 다시 만들 수 있고, 더 필요하면 관리자에게 문의해 주세요.</p>
+  </div>
+  <div style="padding:0 40px 24px">
+    <div class="tbl">
+      <table>
+        <thead><tr><th style="width:220px">단어</th><th>문맥 뜻</th><th style="width:260px">　</th></tr></thead>
+        <tbody>
+          <tr><td class="en" style="font-weight:700;font-size:16.5px">residual</td><td style="font-weight:600">입력을 그대로 더해 주는 (잔차)</td>
+            <td style="font-size:12.5px"><span class="limited">이번 달 사용량을 다 썼습니다 · 관리자에게 문의해 주세요</span></td></tr>
+          <tr><td class="en" style="font-weight:700;font-size:16.5px">latent</td><td style="font-weight:600">겉으로 드러나지 않은 (잠재)</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="label"><b>6. 관리 화면 사용량</b> 폭 880px. 표 위에 이번 달 비용 한 칸, 표에 "이번 달" 열</div>
+<div class="frame">
+  <nav class="nav"><span class="brand">slave-voca</span><a href="#">홈</a><a href="#">복습 <span class="badge">19</span></a><a href="#">문서</a><a href="#" class="push" aria-current="page">관리 <span class="badge">1</span></a><a href="#">설정</a></nav>
+  <main style="max-width:880px;margin:0 auto;padding:32px 16px 40px">
+    <h2 style="font-size:26px;margin:0">사용자</h2>
+    <p style="color:var(--muted);font-size:14px;margin:4px 0 20px" class="num">대기 1 · 승인 7 · 사용 중지 1</p>
+    <section class="usage" aria-label="이번 달 Gemini 비용">
+      <div><div class="k">이번 달 Gemini 비용</div><div class="v num">$0.42 <small>/ $5.00</small></div></div>
+      <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="5" aria-valuenow="0.42"><i style="width:8.4%"></i></div>
+      <div class="k num" style="font-weight:500">8%</div>
+      <p class="note">10월 1일부터 · 한국 시간. 매월 1일 0시에 새로 셉니다. 정산 중인 요청은 예상 비용으로 셉니다.</p>
+    </section>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>사용자</th><th style="width:130px">상태</th><th class="r" style="width:130px">이번 달 단어</th><th style="width:120px">가입</th><th class="r" style="width:150px">동작</th></tr></thead>
+        <tbody>
+          <tr><td><div class="n">박석사</div><div class="e">seoksa.park@gmail.com</div></td><td><span class="status"><span class="dot wait"></span>승인 대기</span></td><td class="r num" style="color:var(--muted)">0</td><td class="num" style="font-size:13px">10월 16일 14:32</td><td class="r"><button class="btn primary sm">승인</button> <button class="btn ghost sm">사용 중지</button></td></tr>
+          <tr><td><div class="n">김연구</div><div class="e">yeongu.kim@gmail.com</div></td><td><span class="status"><span class="dot ok"></span>승인됨</span></td><td class="r"><span class="status" style="justify-content:flex-end"><span class="dot hard"></span><span class="num">4,000</span> 한도</span></td><td class="num" style="font-size:13px">10월 15일 21:10</td><td class="r"><button class="btn ghost sm">사용 중지</button></td></tr>
+          <tr><td><div class="n">정학부</div><div class="e">hakbu.jung@korea.ac.kr</div></td><td><span class="status"><span class="dot ok"></span>승인됨</span></td><td class="r num">1,284</td><td class="num" style="font-size:13px">10월 14일 11:47</td><td class="r"><button class="btn ghost sm">사용 중지</button></td></tr>
+          <tr><td><div class="n">iwtkmn0219 <span style="border:1px solid var(--line-strong);border-radius:4px;padding:0 5px;font-size:11.5px;color:var(--muted)">나</span></div><div class="e">iwtkmn0219@gmail.com</div></td><td><span class="status"><span class="dot ok"></span>관리자</span></td><td class="r num">212</td><td class="num" style="font-size:13px">10월 13일 09:00</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin:10px 0 0;font-size:12.5px;color:var(--muted)">한도: 사용자당 월 4,000단어 · 전체 월 $5.00</p>
+  </main>
+</div>
+
+<div class="label"><b>6-1. 비용 칸의 세 단계</b> 막대 색만 바뀐다(선이라 빨강·노랑 허용)</div>
+<div class="row" style="gap:16px">
+  <section class="usage" style="flex:1 1 300px;margin:0"><div><div class="k">이번 달 Gemini 비용</div><div class="v num">$0.42 <small>/ $5.00</small></div></div><div class="meter"><i style="width:8.4%"></i></div><div class="k num">8%</div></section>
+  <section class="usage" style="flex:1 1 300px;margin:0"><div><div class="k">이번 달 Gemini 비용</div><div class="v num">$4.10 <small>/ $5.00</small></div></div><div class="meter warn"><i style="width:82%"></i></div><div class="k num">82%</div></section>
+  <section class="usage" style="flex:1 1 300px;margin:0"><div><div class="k">이번 달 Gemini 비용</div><div class="v num">$5.00 <small>/ $5.00</small></div></div><div class="meter full"><i style="width:100%"></i></div><div class="k">상한 도달 · 뜻 만들기 멈춤</div></section>
+</div>
+<div style="height:64px"></div>
+</body>
+</html>
