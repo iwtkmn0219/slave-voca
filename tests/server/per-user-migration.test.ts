@@ -28,7 +28,8 @@ function migrateUpTo0005(target: string) {
   fs.cpSync(path.join(process.cwd(), 'drizzle'), folder, { recursive: true });
   const journalPath = path.join(folder, 'meta', '_journal.json');
   const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8')) as { entries: { tag: string }[] };
-  journal.entries = journal.entries.filter((e) => e.tag !== '0006_per_user');
+  // 0006부터 뒤는 모두 뺀다. 뒤 마이그레이션(0007 등)이 먼저 적용되면 drizzle은 그보다 오래된 0006을 건너뛴다.
+  journal.entries = journal.entries.filter((e) => Number(e.tag.slice(0, 4)) < 6);
   fs.writeFileSync(journalPath, JSON.stringify(journal));
   const sqlite = new Database(target);
   migrate(drizzle({ client: sqlite }), { migrationsFolder: folder });
