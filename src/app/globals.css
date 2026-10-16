@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* 터치 기기(마우스 없음): 단축키 표시를 숨긴다. 폭이 아니라 입력 장치로 나눈다(C 화면 규칙 6장 3) */
+@custom-variant touch (@media (hover: none) and (pointer: coarse));
+
 /* 디자인 토큰: docs/superpowers/specs/2026-10-15-ui-redesign.md 3장 (A안 「지면」).
    컴포넌트는 dark: 변형을 쓰지 않고 이 변수만 쓴다. 각 색은 light-dark(라이트, 다크)로 한 번만 적는다.
    어느 쪽을 쓸지는 color-scheme이 정한다: 기본은 OS 설정, 설정 화면에서 고른 테마는 <html data-theme>. */
@@ -121,5 +124,34 @@ mark {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* 휴대폰에서 누르는 것: iOS 기본 탭 강조와 두 번 탭 확대를 끈다(C 화면 규칙 7.6) */
+.tap {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* 글자 버튼은 모양 그대로 두고 누르는 범위만 44px 이상으로 넓힌다(C 화면 규칙 6장 4) */
+@media (hover: none) and (pointer: coarse) {
+  .hit-44 {
+    position: relative;
+  }
+  .hit-44::after {
+    content: "";
+    position: absolute;
+    inset: 50% -6px auto;
+    height: 44px;
+    transform: translateY(-50%);
+  }
+}
+
+/* 휴대폰 폭: 입력칸 글자를 16px 이상으로(iOS는 그보다 작은 입력칸에 포커스하면 화면을 확대한다. C 화면 규칙 9장) */
+@media (max-width: 639.98px) {
+  input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+  select,
+  textarea {
+    font-size: 16px;
   }
 }

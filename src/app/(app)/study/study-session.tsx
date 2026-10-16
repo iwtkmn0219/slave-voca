@@ -18,11 +18,44 @@ import type { RegenerateUsageResult } from "@/server/services/usage-meaning";
 import { answerCard, undoLastAnswer } from "./actions";
 import { SpeakButton, speak } from "./speak-button";
 
+// active: 누르는 동안 바탕을 한 단계 진하게(휴대폰에는 마우스 올림이 없다. C 화면 규칙 7.6)
 const ANSWER_BUTTONS: { answer: Answer; label: string; key: string; tone: string; text: string }[] = [
-  { answer: "again", label: "모름", key: "1", tone: "bg-again-soft text-again", text: "text-again" },
-  { answer: "hard", label: "애매", key: "2", tone: "bg-hard-soft text-hard", text: "text-hard" },
-  { answer: "good", label: "앎", key: "3", tone: "bg-good-soft text-good", text: "text-good" },
+  {
+    answer: "again",
+    label: "모름",
+    key: "1",
+    tone: "bg-again-soft text-again active:bg-[color-mix(in_srgb,currentColor_10%,var(--again-soft))]",
+    text: "text-again",
+  },
+  {
+    answer: "hard",
+    label: "애매",
+    key: "2",
+    tone: "bg-hard-soft text-hard active:bg-[color-mix(in_srgb,currentColor_10%,var(--hard-soft))]",
+    text: "text-hard",
+  },
+  {
+    answer: "good",
+    label: "앎",
+    key: "3",
+    tone: "bg-good-soft text-good active:bg-[color-mix(in_srgb,currentColor_10%,var(--good-soft))]",
+    text: "text-good",
+  },
 ];
+
+// 응답 시도 id. crypto.randomUUID는 https·localhost에서만 있어, 그 밖(LAN 주소로 폰 확인)에서는 난수 문자열을 쓴다.
+function newAttemptId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+// 응답 저장 실패는 서버 문구 대신 이 문구를 쓴다(C 화면 규칙 7.6).
+const SAVE_FAILED = "응답을 저장하지 못했습니다 · 다시 눌러 주세요";
+// 누른 뒤 이만큼 지나도 저장이 안 끝나면 "저장 중"을 보인다(빠른 망에서 깜박이지 않게).
+const SAVING_HINT_DELAY_MS = 400;
+// 이 글자 수 이상인 단어는 휴대폰에서 한 단계 작게 쓴다(C 화면 규칙 7.4).
+const LONG_WORD = 13;
 
 // 되돌릴 수 있는 직전 응답. card는 응답 전 카드(앞면으로 다시 보여 줄 것), prevDue는 응답 전 lastDue 값.
 interface LastAnswer {
@@ -38,7 +71,7 @@ const UNDO_REJECTED = "되돌리지 못했습니다 · 다른 곳에서 이미 �
 const UNDO_FAILED = "되돌리지 못했습니다";
 
 const undoButtonClass =
-  "text-muted underline decoration-dotted underline-offset-[3px] hover:text-accent hover:decoration-solid focus-visible:text-accent focus-visible:decoration-solid disabled:opacity-55";
+  "hit-44 tap text-muted underline decoration-dotted underline-offset-[3px] hover:text-accent hover:decoration-solid focus-visible:text-accent focus-visible:decoration-solid disabled:opacity-55";
 
 // 답 버튼 아래 단축키 안내 줄의 되돌리기 자리(Designer 2026-10-16). 무엇이 되돌려지는지 "단어 · 응답"으로 보인다.
 function UndoControl({
@@ -107,10 +140,16 @@ function UsageBlock({
   onRegenerate: () => void;
 }) {
   return (
-    <div className={primary ? "mt-6 border-t border-line pt-5" : "mt-4 border-t border-dashed border-line pt-4"}>
+    <div
+      className={
+        primary
+          ? "mt-6 border-t border-line pt-5 max-sm:mt-4 max-sm:pt-4"
+          : "mt-4 border-t border-dashed border-line pt-4"
+      }
+    >
       {/* 다시 만드는 동안 원래 뜻을 제자리에 흐리게 둔다: 카드 높이와 아래 답 버튼 위치가 변하지 않는다 */}
       <div
-        className={`${primary ? "text-[22px] leading-[1.45] font-bold" : "text-[17px] font-bold"} ${
+        className={`${primary ? "text-[22px] leading-[1.45] font-bold max-sm:text-[20px]" : "text-[17px] font-bold max-sm:text-base"} ${
           regen?.phase === "busy" ? "opacity-50" : ""
         }`}
       >
@@ -124,15 +163,19 @@ function UsageBlock({
           </span>
         )}
       </div>
-      <p className={`mt-2.5 font-en text-ink-2 ${primary ? "text-lg leading-[1.6]" : "text-base leading-[1.6]"}`}>
+      <p
+        className={`mt-2.5 font-en text-ink-2 [overflow-wrap:anywhere] ${
+          primary ? "text-lg leading-[1.6] max-sm:text-[16.5px]" : "text-base leading-[1.6] max-sm:text-[15px]"
+        }`}
+      >
         <Highlighted sentence={usage.sentence} word={usage.surface} />
       </p>
-      {/* 출처는 왼쪽, 다시 만들기는 오른쪽 끝: 제목 길이와 상관없이 용례마다 같은 자리다 */}
-      <div className="mt-2 flex items-start justify-between gap-4 text-[12.5px] leading-5 text-muted">
-        <p>
+      {/* PC: 출처는 왼쪽, 다시 만들기는 오른쪽 끝. 휴대폰: 출처 아래 줄(제목이 두 줄이 되어도 버튼이 옮겨 다니지 않게) */}
+      <div className="mt-2 flex items-start justify-between gap-4 text-[12.5px] leading-5 text-muted max-sm:flex-col max-sm:gap-1">
+        <p className="[overflow-wrap:anywhere]">
           — <span className="font-en text-[13.5px] italic">{usage.documentTitle}</span>
         </p>
-        <div className="flex h-5 shrink-0 items-center whitespace-nowrap">
+        <div className="flex h-5 shrink-0 items-center whitespace-nowrap empty:hidden max-sm:text-[13px]">
           {regen?.phase !== "limited" && (
             <RegenSlot
               state={regen}
@@ -160,7 +203,16 @@ async function requestRegeneration(occurrenceId: number): Promise<RegenerateUsag
   return (await res.json()) as RegenerateUsageResult;
 }
 
-export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpeak: boolean }) {
+// hasCards: 이 사용자에게 카드가 하나라도 있는지. 큐가 비었을 때 "지금 없음"과 "아직 없음"을 나눈다.
+export function StudySession({
+  cards,
+  autoSpeak,
+  hasCards,
+}: {
+  cards: StudyCard[];
+  autoSpeak: boolean;
+  hasCards: boolean;
+}) {
   const router = useRouter();
   const [queue, setQueue] = useState(cards);
   // 큐를 바꾸는 곳은 모두 이 함수를 거친다: 응답이 끝나는 사이에 다시 만들기가 새 뜻을 넣었어도 최신 큐 위에서 갱신한다.
@@ -176,14 +228,18 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
   const [againCount, setAgainCount] = useState(0);
   const [lastDue, setLastDue] = useState<Map<number, number>>(new Map());
   const [soon, setSoon] = useState<Soon | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [saving, startSaving] = useTransition();
+  const [slowSaving, setSlowSaving] = useState(false);
+  const cardRef = useRef<HTMLElement>(null);
   // 용례별 다시 만들기 상태. 결과 문구는 그 카드를 보는 동안만 남는다.
   const [regen, setRegen] = useState<Map<number, RegenState>>(new Map());
   const currentWordId = useRef<number | null>(null);
   // 이번 세션에서 다시 만든 뜻. 응답 뒤 큐에서 빠진 카드를 되돌릴 때도 새 뜻을 살린다.
   const meaningsRef = useRef(new Map<number, RegeneratedMeaning>());
   const locked = useRef(false);
+  // 한 카드의 응답 시도 id. 저장이 실패해 다시 누를 때 같은 id를 보내, 서버가 저장했지만 응답만 유실된 경우에도 한 번만 적용되게 한다.
+  const attempt = useRef<{ wordId: number; id: string } | null>(null);
   const [last, setLast] = useState<LastAnswer | null>(null);
   const [undoNote, setUndoNote] = useState<UndoNote>(null);
 
@@ -194,7 +250,12 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
     // 저장·되돌리기 처리 중에는 열지 않는다(키보드는 이미 막혀 있고, 버튼 클릭도 같게 한다).
     if (!card || revealed || locked.current) return;
     setRevealed(true);
+    // iOS는 사용자 동작(탭·키) 처리 안에서 시작한 음성만 허용한다: 미루지 않고 여기서 바로 읽는다(7.8).
     if (autoSpeak) speak(card.lemma);
+    // 휴대폰: 뒷면이 길어 아래로 내려가 있었으면 카드 맨 위로 맞춘다(7.5).
+    if (window.matchMedia("(max-width: 639px)").matches) {
+      requestAnimationFrame(() => cardRef.current?.scrollIntoView({ block: "start" }));
+    }
   };
 
   const answer = (choice: Answer) => {
@@ -203,12 +264,14 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
     locked.current = true;
     startSaving(async () => {
       try {
-        const result = await answerCard(card.wordId, choice);
+        if (attempt.current?.wordId !== card.wordId) attempt.current = { wordId: card.wordId, id: newAttemptId() };
+        const result = await answerCard(card.wordId, choice, attempt.current.id);
         if (result.error !== null) {
-          setError(result.error);
+          setSaveFailed(true);
           return;
         }
-        setError(null);
+        setSaveFailed(false);
+        attempt.current = null;
         setAnswered((n) => n + 1);
         if (choice === "again") setAgainCount((n) => n + 1);
         setLast({ logId: result.logId, card, choice, prevDue: lastDue.get(card.wordId) });
@@ -232,6 +295,9 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
         setRevealed(false);
         // 다음 카드로 넘어가면 결과 문구를 지운다. 진행 중인 요청의 스피너는 그 카드가 다시 나올 때를 위해 둔다.
         setRegen((m) => new Map([...m].filter(([, s]) => s.phase === "busy")));
+      } catch {
+        // 망이 끊겨 Action 자체가 실패한 경우(휴대폰 망). 화면을 깨지 않고 다시 누르게 한다(C 화면 규칙 7.6).
+        setSaveFailed(true);
       } finally {
         locked.current = false; // 실패해도 다시 누를 수 있게 푼다
       }
@@ -281,6 +347,16 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
   useEffect(() => {
     currentWordId.current = card?.wordId ?? null;
   });
+
+  // 저장이 SAVING_HINT_DELAY_MS보다 오래 걸릴 때만 "저장 중"을 보인다.
+  useEffect(() => {
+    if (!saving) return;
+    const timer = setTimeout(() => setSlowSaving(true), SAVING_HINT_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      setSlowSaving(false);
+    };
+  }, [saving]);
 
   const setUsageRegen = (occurrenceId: number, state: RegenState | undefined) =>
     setRegen((m) => {
@@ -341,7 +417,8 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
         return;
       }
       if (!card) {
-        if (e.key === "Enter") router.push("/");
+        // 카드가 하나도 없으면 문서로, 아니면 홈으로(빈 화면의 버튼과 같다)
+        if (e.key === "Enter") router.push(answered === 0 && !hasCards ? "/documents" : "/");
         return;
       }
       if (e.key === "p" || e.key === "P") {
@@ -364,9 +441,32 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
+  if (!card && answered === 0) {
+    // 이번 세션에 답한 것이 없다: 카드가 있으면 "지금 없음", 하나도 없으면 "아직 없음"(7.9)
+    return (
+      <div className="py-16 text-center max-sm:px-2 max-sm:pt-[72px] max-sm:pb-0">
+        <p className="text-[22px] font-bold">{hasCards ? "지금 복습할 카드가 없습니다" : "아직 카드가 없습니다"}</p>
+        <p className="mt-3 text-sm text-muted">
+          {hasCards
+            ? "오늘 나올 카드를 모두 봤습니다. 내일 다시 오세요."
+            : "PC에서 논문 PDF를 올리고 단어를 저장하면 여기서 복습할 수 있습니다."}
+        </p>
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={() => router.push(hasCards ? "/" : "/documents")}
+            className={buttonClass({ variant: "secondary" }, "tap max-sm:h-12 max-sm:w-full")}
+          >
+            {hasCards ? "홈으로" : "문서로"} <Kbd>Enter</Kbd>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!card) {
     return (
-      <div className="py-16 text-center">
+      <div className="py-16 text-center max-sm:px-2 max-sm:pt-[72px] max-sm:pb-0">
         <p className="text-[22px] font-bold">오늘 복습을 마쳤습니다</p>
         {answered > 0 && (
           <p className="mt-4 inline-flex gap-5 text-sm text-ink-2">
@@ -390,7 +490,11 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
           </p>
         )}
         <div className="mt-6">
-          <button type="button" onClick={() => router.push("/")} className={buttonClass({ variant: "primary" })}>
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className={buttonClass({ variant: "primary" }, "tap max-sm:h-12 max-sm:w-full")}
+          >
             홈으로 <Kbd onAccent>Enter</Kbd>
           </button>
         </div>
@@ -405,10 +509,21 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
 
   const total = answered + queue.length;
   const [first, second] = card.usages;
+  const long = card.lemma.length >= LONG_WORD;
+  // 휴대폰 고정 줄 위 칸: 저장 실패 > 저장 중 > 되돌리기(7.6). PC는 지금처럼 "P 발음 듣기 · 되돌리기".
+  const mobileStatus = saveFailed ? (
+    <span role="alert">
+      <Failed>{SAVE_FAILED}</Failed>
+    </span>
+  ) : saving && slowSaving ? (
+    <span className="inline-flex items-center gap-1.5">
+      <Spinner /> 저장 중
+    </span>
+  ) : null;
 
   return (
-    <div>
-      <div className="flex items-center gap-3.5 text-[13px] text-muted">
+    <div className="flex flex-1 flex-col">
+      <div className="flex items-center gap-3.5 text-[13px] text-muted max-sm:pt-3.5">
         <span className="tabular-nums">
           {answered} / {total}
         </span>
@@ -420,16 +535,25 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
         </span>
       </div>
 
-      <section className="mt-5 flex min-h-[380px] flex-col rounded-lg border border-line bg-surface px-12 pt-10 pb-8 shadow-1 max-[900px]:px-5 max-[900px]:pt-7">
+      {/* 앞면은 카드 어디를 눌러도 뒷면이 열린다(7.5). 키보드·읽기 프로그램은 "뒷면 보기" 버튼을 쓰므로 role을 주지 않는다 */}
+      <section
+        ref={cardRef}
+        onClick={revealed ? undefined : reveal}
+        className={`tap mt-5 flex min-h-[380px] scroll-mt-3 flex-col rounded-lg border border-line bg-surface px-12 pt-10 pb-8 shadow-1 max-[900px]:px-5 max-[900px]:pt-7 max-sm:mt-3 max-sm:mb-3 max-sm:min-h-0 max-sm:pt-[22px] max-sm:pb-5 ${
+          revealed ? "" : "cursor-pointer max-sm:flex-1"
+        }`}
+      >
         {card.isNew && (
           <div>
             <Tag kind="new" />
           </div>
         )}
-        <div className={`flex items-center gap-3 ${card.isNew ? "mt-4" : ""}`}>
+        <div className={`flex items-center gap-3 max-sm:items-start max-sm:gap-2.5 ${card.isNew ? "mt-4" : ""}`}>
           <h2
-            className={`font-en leading-[1.1] font-bold tracking-[-0.01em] ${
-              revealed ? "text-[40px]" : "text-[52px] max-[900px]:text-[38px]"
+            className={`min-w-0 font-en leading-[1.1] font-bold tracking-[-0.01em] [overflow-wrap:anywhere] ${
+              revealed
+                ? `text-[40px] ${long ? "max-sm:text-[24px]" : "max-sm:text-[30px]"}`
+                : `text-[52px] max-[900px]:text-[38px] ${long ? "max-sm:text-[28px]" : "max-sm:text-[36px]"}`
             }`}
           >
             {card.lemma}
@@ -439,7 +563,10 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
 
         {revealed ? (
           <>
-            <p className={`mt-1 font-en text-[19px] ${card.phonetic ? "text-muted" : "text-[15px] text-muted"}`}>
+            {/* 발음기호가 없을 때의 안내는 한글이라 영어 글꼴(Gentium)이 아닌 sans로 쓴다(개편안 3.3) */}
+            <p
+              className={`mt-1 text-muted ${card.phonetic ? "font-en text-[19px] max-sm:text-[17px]" : "font-sans text-[15px]"}`}
+            >
               {card.phonetic ?? "발음기호 없음"}
             </p>
             {[first, second].map(
@@ -456,54 +583,66 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
             )}
           </>
         ) : (
-          <p className="mt-auto pt-12 text-center text-sm text-muted">이 문서에서 어떤 뜻이었는지 떠올려 보세요</p>
+          <p className="mt-auto pt-12 text-center text-sm text-muted">
+            이 문서에서 어떤 뜻이었는지 떠올려 보세요
+            <span className="mt-1 hidden text-[12.5px] max-sm:block">카드를 누르거나 아래 버튼</span>
+          </p>
         )}
       </section>
 
-      {revealed ? (
-        <div className="mt-5 grid grid-cols-3 gap-3">
-          {ANSWER_BUTTONS.map((b) => (
-            <button
-              key={b.answer}
-              type="button"
-              disabled={saving}
-              onClick={() => answer(b.answer)}
-              className={`grid justify-items-center gap-0.5 rounded-lg px-3.5 py-3.5 disabled:opacity-55 ${b.tone}`}
-            >
-              <b className="text-base">{b.label}</b>
-              <span className="text-xs opacity-80">{formatInterval(card.intervals[b.answer])} 뒤</span>
-              <span className="mt-1">
-                <Kbd>{b.key}</Kbd>
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={reveal}
-          className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-lg border border-line-strong bg-surface p-3.5 text-[15px] font-semibold text-ink hover:bg-sunken"
-        >
-          뒷면 보기 <Kbd>Space</Kbd>
-        </button>
-      )}
-      <p className="mt-2.5 flex flex-wrap items-center justify-center gap-x-2 text-[13px] text-muted">
-        <span>
-          <Kbd>P</Kbd> 발음 듣기
-        </span>
-        {(last || undoNote) && (
-          <>
-            <span aria-hidden className="mx-1">
-              ·
-            </span>
-            <UndoControl last={last} note={undoNote} busy={saving} onUndo={undo} />
-          </>
+      {/* 휴대폰: 화면 아래 고정 줄(상태 32px + 버튼). PC: 카드 아래 버튼 + 안내 줄(지금과 같음) */}
+      <div className="flex flex-col max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-4 max-sm:mt-auto max-sm:border-t max-sm:border-line max-sm:bg-bg max-sm:px-4 max-sm:pt-2 max-sm:pb-[calc(12px+env(safe-area-inset-bottom))]">
+        {revealed ? (
+          <div className="mt-5 grid grid-cols-3 gap-3 max-sm:mt-0 max-sm:gap-2">
+            {ANSWER_BUTTONS.map((b) => (
+              <button
+                key={b.answer}
+                type="button"
+                disabled={saving}
+                onClick={() => answer(b.answer)}
+                className={`tap grid justify-items-center gap-0.5 rounded-lg px-3.5 py-3.5 disabled:opacity-55 max-sm:h-[60px] max-sm:content-center max-sm:py-0 ${b.tone}`}
+              >
+                <b className="text-base">{b.label}</b>
+                <span className="text-xs opacity-80">{formatInterval(card.intervals[b.answer])} 뒤</span>
+                <span className="mt-1 touch:hidden">
+                  <Kbd>{b.key}</Kbd>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={reveal}
+            className="tap mt-5 flex w-full items-center justify-center gap-2.5 rounded-lg border border-line-strong bg-surface p-3.5 text-[15px] font-semibold text-ink hover:bg-sunken active:bg-sunken max-sm:mt-0 max-sm:h-[52px] max-sm:text-base"
+          >
+            뒷면 보기 <Kbd>Space</Kbd>
+          </button>
         )}
-      </p>
+        <div className="mt-2.5 flex flex-wrap items-center justify-center gap-x-2 text-[13px] text-muted max-sm:order-first max-sm:mt-0 max-sm:mb-1 max-sm:h-8 max-sm:flex-nowrap max-sm:overflow-hidden">
+          {/* 휴대폰 전용 상태(저장 중·저장 실패). 되돌리기는 UndoControl이 따로 알린다 */}
+          <span aria-live="polite" className="hidden empty:hidden max-sm:inline-flex">
+            {mobileStatus}
+          </span>
+          <span className={`inline-flex flex-wrap items-center justify-center gap-x-2 ${mobileStatus ? "max-sm:hidden" : ""}`}>
+            <span className="touch:hidden">
+              <Kbd>P</Kbd> 발음 듣기
+            </span>
+            {(last || undoNote) && (
+              <>
+                <span aria-hidden className="mx-1 touch:hidden">
+                  ·
+                </span>
+                <UndoControl last={last} note={undoNote} busy={saving} onUndo={undo} />
+              </>
+            )}
+          </span>
+        </div>
+      </div>
 
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-again">
-          {error}
+      {saveFailed && (
+        <p role="alert" className="mt-3 text-center text-sm max-sm:hidden">
+          <Failed>{SAVE_FAILED}</Failed>
         </p>
       )}
     </div>

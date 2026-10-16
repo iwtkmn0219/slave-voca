@@ -116,7 +116,11 @@ export function WordTable({ documentId, rows }: { documentId: number; rows: Word
               >
                 <td className="px-3 py-2.5">
                   <div className="font-en text-[17px] font-bold">{r.lemma}</div>
-                  <div className="font-en text-sm text-muted">{r.phonetic ?? "발음기호 없음"}</div>
+                  {r.phonetic ? (
+                    <div className="font-en text-sm text-muted">{r.phonetic}</div>
+                  ) : (
+                    <div className="text-[15px] text-muted">발음기호 없음</div>
+                  )}
                 </td>
                 <td className="px-3 py-2.5">
                   <MeaningText row={r} busy={regen.get(r.id)?.phase === "busy"} />

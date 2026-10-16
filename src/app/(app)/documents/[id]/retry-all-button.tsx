@@ -63,7 +63,7 @@ export function FailedMeaningsNotice({
           </>
         )}
       </Notice>
-      {outcome?.kind === "limit" && <Notice className="mt-2">{LIMIT_REGEN(outcome.resetsOn)}</Notice>}
+      {outcome?.kind === "limit" && <Notice alert className="mt-2">{LIMIT_REGEN(outcome.resetsOn)}</Notice>}
     </>
   );
 }

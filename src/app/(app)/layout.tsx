@@ -58,8 +58,8 @@ async function AppNavLinks() {
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <>
-      <nav className="flex h-[52px] items-center gap-1 border-b border-line bg-surface px-6">
-        <span className="mr-5 text-[13px] font-semibold tracking-[0.02em] text-muted">slave-voca</span>
+      <nav className="flex h-[52px] items-center gap-1 border-b border-line bg-surface px-6 max-sm:gap-0.5 max-sm:px-3">
+        <span className="mr-5 text-[13px] font-semibold tracking-[0.02em] text-muted max-sm:hidden">slave-voca</span>
         <Suspense fallback={<NavLinksFallback />}>
           <AppNavLinks />
         </Suspense>

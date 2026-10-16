@@ -37,10 +37,10 @@ async function DocumentList() {
         <thead>
           <tr className="border-b border-line-strong text-left text-xs font-semibold whitespace-nowrap text-muted">
             <th className="px-3 py-2">제목</th>
-            <th className="w-20 px-3 py-2">종류</th>
-            <th className="w-[130px] px-3 py-2">상태</th>
-            <th className="w-[110px] px-3 py-2 text-right">단어</th>
-            <th className="w-[120px] px-3 py-2 text-right">올린 날</th>
+            <th className="w-20 px-3 py-2 max-sm:hidden">종류</th>
+            <th className="w-[130px] px-3 py-2 max-sm:w-auto">상태</th>
+            <th className="w-[110px] px-3 py-2 text-right max-sm:hidden">단어</th>
+            <th className="w-[120px] px-3 py-2 text-right max-sm:w-auto">올린 날</th>
           </tr>
         </thead>
         <tbody>
@@ -70,14 +70,14 @@ async function DocumentList() {
                     </div>
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-sm">{KIND_LABEL[doc.kind]}</td>
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-2.5 text-sm max-sm:hidden">{KIND_LABEL[doc.kind]}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
                   <DocumentStatusLabel status={doc.status} />
                 </td>
-                <td className="px-3 py-2.5 text-right text-sm tabular-nums">
+                <td className="px-3 py-2.5 text-right text-sm tabular-nums max-sm:hidden">
                   {doc.status === "reviewing" ? `후보 ${candidateCounts.get(doc.id) ?? 0}` : words || "—"}
                 </td>
-                <td className="px-3 py-2.5 text-right text-sm text-muted tabular-nums">
+                <td className="px-3 py-2.5 text-right text-sm whitespace-nowrap text-muted tabular-nums">
                   {doc.createdAt.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}
                 </td>
               </tr>

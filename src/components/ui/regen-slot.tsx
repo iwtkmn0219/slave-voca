@@ -12,7 +12,7 @@ export type RegenState =
 
 // 평소에는 점선 밑줄, 마우스·키보드 포커스에서 강조색 실선 밑줄.
 export const regenButtonClass =
-  "text-muted underline decoration-dotted underline-offset-[3px] hover:text-accent hover:decoration-solid focus-visible:text-accent focus-visible:decoration-solid";
+  "hit-44 tap text-muted underline decoration-dotted underline-offset-[3px] hover:text-accent hover:decoration-solid focus-visible:text-accent focus-visible:decoration-solid";
 
 function RegenButton({ label, onClick, className }: { label: string; onClick: () => void; className: string }) {
   return (

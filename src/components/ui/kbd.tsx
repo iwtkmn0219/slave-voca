@@ -5,7 +5,7 @@ export function Kbd({ children, onAccent = false }: { children: React.ReactNode;
     : "border-line-strong bg-surface text-muted";
   return (
     <kbd
-      className={`rounded-sm border border-b-2 px-[5px] py-[2px] font-sans text-[11px] leading-none font-medium ${tone}`}
+      className={`rounded-sm border border-b-2 px-[5px] touch:hidden py-[2px] font-sans text-[11px] leading-none font-medium ${tone}`}
     >
       {children}
     </kbd>

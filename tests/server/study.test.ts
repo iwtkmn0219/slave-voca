@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { addUser, USER } from '../helpers/users';
+import { addUser, OTHER, USER } from '../helpers/users';
 import { createDb, type Db } from '@/server/db/client';
 import { reviewLogs, words } from '@/server/db/schema';
 import { saveReviewSelection, setMeanings, listMeaningRequests } from '@/server/repo/cards';
 import { listCandidates, replaceCandidates } from '@/server/repo/candidates';
 import { createDocument, updateDocumentStatus } from '@/server/repo/documents';
-import { countStudyToday, getStudyQueue, recordAnswer, StudyError } from '@/server/repo/study';
+import { countStudyToday, getStudyQueue, hasAnyCard, recordAnswer, StudyError } from '@/server/repo/study';
 
 const now = new Date(2026, 9, 13, 10, 0, 0);
 const HOUR = 3_600_000;
@@ -93,6 +93,16 @@ describe('getStudyQueue', () => {
       sentence: 'In Third, robust matters.',
     });
     expect(card.usages[1]).toMatchObject({ documentTitle: 'Second', meaningStatus: 'pending' });
+  });
+});
+
+describe('hasAnyCard', () => {
+  it('tells "no cards yet" apart from "nothing due now", per user', () => {
+    addUser(db, OTHER);
+    expect(hasAnyCard(db, USER)).toBe(false);
+    saveCards('Paper', ['robust']);
+    expect(hasAnyCard(db, USER)).toBe(true);
+    expect(hasAnyCard(db, OTHER)).toBe(false);
   });
 });
 
