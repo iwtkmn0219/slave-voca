@@ -9,18 +9,21 @@ const BAR: Record<NoticeTone, string> = {
   error: "border-again",
 };
 
+// alert: 사용자가 누른 동작의 결과처럼 바로 알려야 하는 안내(예: 이번 달 한도). 색은 tone대로 둔다.
 export function Notice({
   children,
   className = "",
   tone = "default",
+  alert = false,
 }: {
   children: React.ReactNode;
   className?: string;
   tone?: NoticeTone;
+  alert?: boolean;
 }) {
   return (
     <p
-      role={tone === "error" ? "alert" : "status"}
+      role={alert || tone === "error" ? "alert" : "status"}
       className={`rounded-r-md border-l-[3px] ${BAR[tone]} bg-surface px-3.5 py-2.5 text-[13px] text-ink-2 [&_a]:ml-1.5 ${className}`}
     >
       {children}

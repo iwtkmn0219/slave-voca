@@ -182,7 +182,7 @@ export function CandidateTable({
       {error && (
         <div className="px-10 pt-3">
           {error.limitResetsOn ? (
-            <Notice>{LIMIT_SAVE(error.limitResetsOn)}</Notice>
+            <Notice alert>{LIMIT_SAVE(error.limitResetsOn)}</Notice>
           ) : (
             <p role="alert" className="text-sm">
               <Failed>{error.text}</Failed>

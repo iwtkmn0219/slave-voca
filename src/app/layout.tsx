@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Gentium_Book_Plus } from "next/font/google";
 import localFont from "next/font/local";
 import { ThemeSync } from "@/components/theme-sync";
@@ -25,6 +25,13 @@ const gentium = Gentium_Book_Plus({
 export const metadata: Metadata = {
   title: "slave-voca",
   description: "논문·발표 자료 단어장",
+};
+
+// 휴대폰 고정 줄이 홈 막대·노치를 피하려면 env(safe-area-inset-*)가 필요하다(C 화면 규칙 7.1).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
