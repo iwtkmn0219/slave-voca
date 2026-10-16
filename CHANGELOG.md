@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-16
+
 ### 추가
 - Google 계정 로그인과 가입 승인. 처음 가입한 계정은 관리자가 승인할 때까지 승인 대기 화면만 본다. 관리자(`ADMIN_EMAILS`)는 `/admin`에서 승인·사용 중지·다시 허용을 한다.
 - 개발 전용 로그인(`AUTH_DEV_LOGIN=1`, localhost 주소에서만).
@@ -74,7 +76,8 @@
 ### 추가
 - PDF 업로드, 빈도 기준 후보 단어 추출, 검토 화면.
 
-[Unreleased]: https://github.com/iwtkmn0219/slave-voca/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/iwtkmn0219/slave-voca/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.2.0...v0.3.0
