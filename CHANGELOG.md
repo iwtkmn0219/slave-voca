@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-16
+
+### 바뀜
+- 빈도표를 wordfreq(CC BY-SA 4.0)로 바꿨다. 상업적으로 쓸 수 있고, 출처는 `data/frequency-NOTICE.md`에 있다.
+- 흔한 단어 제외 기준(N)의 기본값을 5,000에서 3,000으로 낮췄다. 학술 핵심어 예외 없이도 hence, whereas, respectively 등이 후보로 남는다.
+
+### 없앰
+- 학술 핵심어 예외(AWL, `data/awl.json`). 이용 조건이 밝혀져 있지 않다.
+- 발음기호 보조용 사전 API(dictionaryapi.dev). 이제 CMUdict만 쓰고, 발음기호 조회에는 네트워크 요청이 없다.
+
+### 업그레이드 시 주의
+- 이미 저장된 후보·카드는 그대로다. 새로 올리는 문서부터 적용된다.
+- 설정에서 N을 저장해 둔 경우 그 값이 그대로 쓰인다. 새 기본값을 쓰려면 설정에서 3000으로 바꾼다.
+- 처음 몇 편은 후보가 15% 안팎 늘고 쉬운 기술어(accuracy, algorithm 등)가 섞인다. "안다"로 정리하면 다음 문서부터 빠진다.
+
 ## [0.4.0] - 2026-10-16
 
 ### 추가
@@ -48,7 +63,8 @@
 ### 추가
 - PDF 업로드, 빈도 기준 후보 단어 추출, 검토 화면.
 
-[Unreleased]: https://github.com/iwtkmn0219/slave-voca/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/iwtkmn0219/slave-voca/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/iwtkmn0219/slave-voca/compare/v0.1.0...v0.2.0

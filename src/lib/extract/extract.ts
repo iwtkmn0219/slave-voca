@@ -15,7 +15,6 @@ export interface ExtractOptions {
   rankOf: RankOf;
   knownLemmas: ReadonlySet<string>;
   existingLemmas: ReadonlySet<string>;
-  isAcademic: (lemma: string) => boolean;
   inDictionary: (lemma: string) => boolean;
 }
 
@@ -24,8 +23,6 @@ const NON_ASCII = /[^\x00-\x7F]/;
 const COMBINING_MARKS = /\p{M}/gu;
 const MIN_LENGTH = 3;
 const MAX_SENTENCE_LENGTH = 300;
-// 학술 핵심어 예외는 상위 2,000위 밖에만 적용한다. 그 안의 AWL 단어(area, data, code)는 쉽다.
-const ACADEMIC_RESCUE_MIN_RANK = 2001;
 
 interface Tally {
   lemma: string;
@@ -44,8 +41,7 @@ function bestRank(words: string[], rankOf: RankOf): number | undefined {
 function isExcludedByRank(lower: string, lemma: string, opts: ExtractOptions): boolean {
   // 표면형도 본다: data → datum처럼 원형이 드문 흔한 단어를 거른다.
   const rank = bestRank([lower, lemma], opts.rankOf);
-  if (rank === undefined || rank > opts.excludeTopN) return false;
-  return !(rank >= ACADEMIC_RESCUE_MIN_RANK && opts.isAcademic(lemma));
+  return rank !== undefined && rank <= opts.excludeTopN;
 }
 
 // 300자를 넘으면 단어가 보이도록 단어 주변을 잘라 정확히 300자로 맞춘다.
@@ -78,7 +74,7 @@ function singularCandidates(lemma: string): string[] {
 
 // 원형 처리기가 못 바꾼 복수형(datasets, logits, hyperparameters)을 단수형으로 돌린다.
 // 그대로 두는 것: -ss·-us·-is로 끝나는 단어(glass, softplus, axis), 사전에 있는 단어(lens, bias, series),
-// 빈도표에는 있는데 단수형은 없는 단어(whereas → wherea는 없다. 학술어 예외도 이 형태로 받는다).
+// 빈도표에는 있는데 단수형은 없는 단어(whereas → wherea는 없다. 빈도 순위도 이 형태로 찾는다).
 // 단수형 후보 중 사전이 아는 것을 먼저 쓰고(databases → database), 없으면 어미 규칙의 첫 후보를 쓴다.
 // 단어마다 처리하므로 단수형이 아는 단어거나 흔한 단어면 원래 규칙대로 함께 빠진다.
 function singularize(lemma: string, opts: ExtractOptions): string {

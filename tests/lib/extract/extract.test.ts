@@ -8,7 +8,6 @@ function options(overrides: Partial<ExtractOptions> = {}): ExtractOptions {
     rankOf: (w) => ranks[w],
     knownLemmas: new Set(),
     existingLemmas: new Set(),
-    isAcademic: () => false,
     inDictionary: () => true,
     ...overrides,
   };
@@ -86,21 +85,17 @@ describe('extractCandidates', () => {
     expect(lemmas(['Thanks to Łukasz and Gödel, results.'])).toEqual(['result', 'thank']);
   });
 
-  it('keeps academic words ranked between 2,001 and N', () => {
-    const ranks: Record<string, number> = { hence: 3500, area: 400 };
-    const opts = options({
-      rankOf: (w) => ranks[w],
-      isAcademic: (l) => l === 'hence' || l === 'area',
-    });
-    const result = lemmas(['Hence the area grows.'], opts);
-    expect(result).toContain('hence');
-    expect(result).not.toContain('area'); // 상위 2,000 안의 학술어는 쉬우므로 그대로 거른다
+  it('drops every word ranked within N and keeps the ones ranked after it', () => {
+    // 학술어 예외는 없다(M5). 기준 N이 곧 경계다.
+    const rankOf = (w: string) => ({ the: 1, hence: 3687, area: 400 })[w];
+    expect(lemmas(['Hence the area grows.'], options({ rankOf, excludeTopN: 3000 }))).toEqual(['grow', 'hence']);
+    expect(lemmas(['Hence the area grows.'], options({ rankOf, excludeTopN: 5000 }))).toEqual(['grow']);
   });
 
-  it('still drops known lemmas even when they are academic', () => {
+  it('drops known lemmas even when they rank after N', () => {
     const opts = options({
-      rankOf: (w) => ({ hence: 3500 })[w],
-      isAcademic: () => true,
+      rankOf: (w) => ({ hence: 3687 })[w],
+      excludeTopN: 3000,
       knownLemmas: new Set(['hence']),
     });
     expect(lemmas(['Hence it grows.'], opts)).not.toContain('hence');
@@ -129,10 +124,10 @@ describe('extractCandidates', () => {
   });
 
   it('keeps a frequency-list word whose s-less form is not a word', () => {
-    // whereas는 WordNet에 없지만 빈도표에 있고 wherea는 없다. 학술어 예외도 whereas로 받아야 한다.
+    // whereas는 WordNet에 없지만 빈도표에 있고 wherea는 없다. 순위도 whereas로 찾아야 한다.
     const opts = options({
-      rankOf: (w) => ({ whereas: 4647 })[w],
-      isAcademic: (l) => l === 'whereas',
+      rankOf: (w) => ({ whereas: 3524 })[w],
+      excludeTopN: 3000,
       inDictionary: () => false,
     });
     expect(lemmas(['The first grows, whereas the second shrinks.'], opts)).toContain('whereas');

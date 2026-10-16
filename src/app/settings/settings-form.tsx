@@ -155,7 +155,7 @@ export function SettingsForm({ initial }: { initial: Values }) {
   return (
     <form ref={form} noValidate onSubmit={submit}>
       <Group title="단어 추출">
-        <Row id="excludeTopN" name="흔한 단어 제외 기준" help="빈도 상위 N위 안의 단어는 후보에서 뺍니다. 학술 핵심어는 남깁니다.">
+        <Row id="excludeTopN" name="흔한 단어 제외 기준" help="빈도 상위 N위 안의 단어는 후보에서 뺍니다.">
           <NumberField
             id="excludeTopN"
             value={excludeTopN}
