@@ -36,6 +36,20 @@
       "when": 1792098388939,
       "tag": "0004_review_prev_card",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792145653403,
+      "tag": "0005_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792147262960,
+      "tag": "0006_per_user",
+      "breakpoints": true
     }
   ]
 }

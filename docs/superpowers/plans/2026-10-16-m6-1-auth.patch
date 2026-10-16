@@ -1,0 +1,923 @@
+diff --git a/src/app/(app)/admin/actions.ts b/src/app/(app)/admin/actions.ts
+new file mode 100644
+index 0000000..d66bb36
+--- /dev/null
++++ b/src/app/(app)/admin/actions.ts
+@@ -0,0 +1,24 @@
++"use server";
++
++import { revalidatePath } from "next/cache";
++import { canSetStatus } from "@/lib/auth/policy";
++import { requireAdmin } from "@/server/auth/current-user";
++import { getDb } from "@/server/db/client";
++import { getUserForAdmin, setUserStatus } from "@/server/repo/users";
++
++export type SetStatusResult = { error: string | null };
++
++// 승인·차단·차단 해제. 관리자인지와 바꿀 수 있는 상태인지를 서버에서 다시 확인한다.
++export async function setUserStatusAction(userId: unknown, status: unknown): Promise<SetStatusResult> {
++  const admin = await requireAdmin();
++  if (typeof userId !== "string" || (status !== "approved" && status !== "blocked")) {
++    return { error: "잘못된 요청입니다." };
++  }
++  const db = getDb();
++  const target = getUserForAdmin(db, userId);
++  if (!target) return { error: "사용자를 찾을 수 없습니다." };
++  if (!canSetStatus(admin, target, status)) return { error: "자기 자신은 차단할 수 없습니다." };
++  setUserStatus(db, userId, status);
++  revalidatePath("/", "layout"); // 메뉴의 승인 대기 배지
++  return { error: null };
++}
+diff --git a/src/app/(app)/admin/page.tsx b/src/app/(app)/admin/page.tsx
+new file mode 100644
+index 0000000..f0c750c
+--- /dev/null
++++ b/src/app/(app)/admin/page.tsx
+@@ -0,0 +1,49 @@
++import { Suspense } from "react";
++import { requireAdmin } from "@/server/auth/current-user";
++import { getDb } from "@/server/db/client";
++import { listUsers } from "@/server/repo/users";
++import { UserRowActions } from "./user-row-actions";
++
++const STATUS_LABEL = { pending: "승인 대기", approved: "승인됨", blocked: "차단됨" } as const;
++
++export default function AdminPage() {
++  return (
++    <main className="mx-auto w-full max-w-[1000px] px-10 py-8 max-[900px]:px-4">
++      <h1 className="text-[26px] font-bold">사용자</h1>
++      <Suspense fallback={<p className="mt-6 text-muted">불러오는 중…</p>}>
++        <UserTable />
++      </Suspense>
++    </main>
++  );
++}
++
++async function UserTable() {
++  const admin = await requireAdmin();
++  const rows = listUsers(getDb());
++  return (
++    <table className="mt-6 w-full text-sm">
++      <thead className="text-left text-muted">
++        <tr>
++          <th className="py-2 font-semibold">이름</th>
++          <th className="py-2 font-semibold">이메일</th>
++          <th className="py-2 font-semibold">상태</th>
++          <th className="py-2 font-semibold">가입</th>
++          <th className="py-2" />
++        </tr>
++      </thead>
++      <tbody>
++        {rows.map((u) => (
++          <tr key={u.id} className="border-t border-line">
++            <td className="py-2.5">{u.name}</td>
++            <td className="py-2.5 text-muted">{u.email}</td>
++            <td className="py-2.5">{STATUS_LABEL[u.status]}</td>
++            <td className="py-2.5 text-muted tabular-nums">{u.createdAt.toLocaleString("ko-KR")}</td>
++            <td className="py-2.5 text-right">
++              <UserRowActions userId={u.id} status={u.status} isSelf={u.id === admin.id} />
++            </td>
++          </tr>
++        ))}
++      </tbody>
++    </table>
++  );
++}
+diff --git a/src/app/(app)/admin/user-row-actions.tsx b/src/app/(app)/admin/user-row-actions.tsx
+new file mode 100644
+index 0000000..69883d7
+--- /dev/null
++++ b/src/app/(app)/admin/user-row-actions.tsx
+@@ -0,0 +1,30 @@
++"use client";
++
++import { useState, useTransition } from "react";
++import { setUserStatusAction } from "./actions";
++
++// 행마다 할 수 있는 동작: 대기 → 승인/차단, 승인됨 → 차단, 차단됨 → 차단 해제. 자기 자신은 차단할 수 없다.
++export function UserRowActions({ userId, status, isSelf }: { userId: string; status: string; isSelf: boolean }) {
++  const [pending, start] = useTransition();
++  const [error, setError] = useState<string | null>(null);
++  const run = (next: "approved" | "blocked") =>
++    start(async () => {
++      setError((await setUserStatusAction(userId, next)).error);
++    });
++  const button = "rounded-md px-3 py-1 text-sm font-semibold hover:bg-sunken disabled:opacity-60";
++  return (
++    <span className="inline-flex items-center gap-1">
++      {status !== "approved" && (
++        <button type="button" disabled={pending} onClick={() => run("approved")} className={button}>
++          {status === "blocked" ? "차단 해제" : "승인"}
++        </button>
++      )}
++      {status !== "blocked" && !isSelf && (
++        <button type="button" disabled={pending} onClick={() => run("blocked")} className={`${button} text-danger`}>
++          차단
++        </button>
++      )}
++      {error && <span role="alert" className="text-xs text-danger">{error}</span>}
++    </span>
++  );
++}
+diff --git a/src/app/documents/[id]/actions.ts b/src/app/(app)/documents/[id]/actions.ts
+similarity index 95%
+rename from src/app/documents/[id]/actions.ts
+rename to src/app/(app)/documents/[id]/actions.ts
+index 4fab1ea..41e7c8d 100644
+--- a/src/app/documents/[id]/actions.ts
++++ b/src/app/(app)/documents/[id]/actions.ts
+@@ -6,6 +6,7 @@ import { getDb } from "@/server/db/client";
+ import { deleteCard, listFailedMeaningIds, occurrencesBelongTo } from "@/server/repo/cards";
+ import { MISSING_KEY_MESSAGE } from "@/lib/regen-messages";
+ import { defaultMeaningModel, regenerateMeanings } from "@/server/services/enrich";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ const BAD_REQUEST = "잘못된 요청입니다.";
+ 
+@@ -24,6 +25,7 @@ export async function regenerateDocumentMeanings(
+   documentId: unknown,
+   occurrenceIds: unknown,
+ ): Promise<RegenerateActionResult> {
++  await requireUser();
+   const ids = parseIdList(occurrenceIds);
+   if (!isId(documentId) || ids === null) return { error: BAD_REQUEST };
+   const db = getDb();
+@@ -37,6 +39,7 @@ export async function regenerateDocumentMeanings(
+ 
+ // 카드 삭제: 모든 문서의 용례와 복습 기록이 함께 지워진다.
+ export async function removeCard(documentId: unknown, wordId: unknown): Promise<{ error: string | null }> {
++  await requireUser();
+   if (!isId(documentId) || !isId(wordId)) return { error: BAD_REQUEST };
+   if (!deleteCard(getDb(), wordId)) return { error: "카드를 찾을 수 없습니다." };
+   refresh(documentId);
+diff --git a/src/app/documents/[id]/page.tsx b/src/app/(app)/documents/[id]/page.tsx
+similarity index 97%
+rename from src/app/documents/[id]/page.tsx
+rename to src/app/(app)/documents/[id]/page.tsx
+index 690662c..92720a5 100644
+--- a/src/app/documents/[id]/page.tsx
++++ b/src/app/(app)/documents/[id]/page.tsx
+@@ -1,6 +1,5 @@
+ import Link from "next/link";
+ import { notFound } from "next/navigation";
+-import { connection } from "next/server";
+ import { Suspense } from "react";
+ import { KIND_LABEL } from "@/components/document-status";
+ import { Notice } from "@/components/ui/notice";
+@@ -9,6 +8,7 @@ import { countOccurrencesByWord, listOccurrencesByDocument } from "@/server/repo
+ import { getDocument } from "@/server/repo/documents";
+ import { RetryAllButton } from "./retry-all-button";
+ import { WordTable } from "./word-table";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ // 문서 단어 목록. 뜻 고치기·다시 시도·카드 삭제는 표(WordTable)에서, 문서 전체 다시 시도는 안내 줄에서 한다.
+ export default function DocumentWordsPage({ params }: PageProps<"/documents/[id]">) {
+@@ -20,7 +20,7 @@ export default function DocumentWordsPage({ params }: PageProps<"/documents/[id]
+ }
+ 
+ async function DocumentWords({ params }: { params: Promise<{ id: string }> }) {
+-  await connection();
++  await requireUser();
+   const id = Number((await params).id);
+   if (!Number.isInteger(id)) notFound();
+ 
+diff --git a/src/app/documents/[id]/retry-all-button.tsx b/src/app/(app)/documents/[id]/retry-all-button.tsx
+similarity index 100%
+rename from src/app/documents/[id]/retry-all-button.tsx
+rename to src/app/(app)/documents/[id]/retry-all-button.tsx
+diff --git a/src/app/documents/[id]/review/actions.ts b/src/app/(app)/documents/[id]/review/actions.ts
+similarity index 94%
+rename from src/app/documents/[id]/review/actions.ts
+rename to src/app/(app)/documents/[id]/review/actions.ts
+index 1f61da5..188e030 100644
+--- a/src/app/documents/[id]/review/actions.ts
++++ b/src/app/(app)/documents/[id]/review/actions.ts
+@@ -6,6 +6,7 @@ import { isId, parseIdList } from "@/lib/validate";
+ import { getDb } from "@/server/db/client";
+ import { ReviewError, saveReviewSelection, type SavedCards } from "@/server/repo/cards";
+ import { defaultEnrichDeps, enrichDocument } from "@/server/services/enrich";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ // 검토 결과를 저장하고, 뜻과 발음을 채운 뒤 문서 단어 목록으로 이동한다.
+ // 인자는 브라우저에서 오므로 형태부터 확인한다. 잘못된 목록이 "아무것도 선택 안 함"으로 읽혀
+@@ -14,6 +15,7 @@ export async function saveReview(
+   documentId: unknown,
+   selectedCandidateIds: unknown,
+ ): Promise<{ error: string }> {
++  await requireUser();
+   const ids = parseIdList(selectedCandidateIds);
+   if (!isId(documentId) || ids === null) return { error: "잘못된 요청입니다." };
+   const db = getDb();
+diff --git a/src/app/documents/[id]/review/candidate-table.tsx b/src/app/(app)/documents/[id]/review/candidate-table.tsx
+similarity index 100%
+rename from src/app/documents/[id]/review/candidate-table.tsx
+rename to src/app/(app)/documents/[id]/review/candidate-table.tsx
+diff --git a/src/app/documents/[id]/review/page.tsx b/src/app/(app)/documents/[id]/review/page.tsx
+similarity index 95%
+rename from src/app/documents/[id]/review/page.tsx
+rename to src/app/(app)/documents/[id]/review/page.tsx
+index d3cadfe..85e6a40 100644
+--- a/src/app/documents/[id]/review/page.tsx
++++ b/src/app/(app)/documents/[id]/review/page.tsx
+@@ -1,11 +1,11 @@
+ import Link from "next/link";
+ import { notFound } from "next/navigation";
+-import { connection } from "next/server";
+ import { Suspense } from "react";
+ import { getDb } from "@/server/db/client";
+ import { listCandidates } from "@/server/repo/candidates";
+ import { getDocument } from "@/server/repo/documents";
+ import { CandidateTable } from "./candidate-table";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export default function ReviewPage({ params }: PageProps<"/documents/[id]/review">) {
+   return (
+@@ -16,7 +16,7 @@ export default function ReviewPage({ params }: PageProps<"/documents/[id]/review
+ }
+ 
+ async function Review({ params }: { params: Promise<{ id: string }> }) {
+-  await connection();
++  await requireUser();
+   const id = Number((await params).id);
+   if (!Number.isInteger(id)) notFound();
+ 
+diff --git a/src/app/documents/[id]/word-table.tsx b/src/app/(app)/documents/[id]/word-table.tsx
+similarity index 100%
+rename from src/app/documents/[id]/word-table.tsx
+rename to src/app/(app)/documents/[id]/word-table.tsx
+diff --git a/src/app/documents/actions.ts b/src/app/(app)/documents/actions.ts
+similarity index 93%
+rename from src/app/documents/actions.ts
+rename to src/app/(app)/documents/actions.ts
+index a5e2db2..adc28c6 100644
+--- a/src/app/documents/actions.ts
++++ b/src/app/(app)/documents/actions.ts
+@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
+ import { redirect } from "next/navigation";
+ import { getDb } from "@/server/db/client";
+ import { ingestPdf, UploadError, type IngestResult } from "@/server/services/ingest";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export interface UploadState {
+   error: string | null;
+@@ -13,6 +14,7 @@ export async function uploadDocument(
+   _prev: UploadState,
+   formData: FormData,
+ ): Promise<UploadState> {
++  await requireUser();
+   const file = formData.get("file");
+   if (!(file instanceof File) || file.size === 0) {
+     return { error: "PDF 파일을 선택하세요." };
+diff --git a/src/app/documents/page.tsx b/src/app/(app)/documents/page.tsx
+similarity index 97%
+rename from src/app/documents/page.tsx
+rename to src/app/(app)/documents/page.tsx
+index 01e3b4a..d72580a 100644
+--- a/src/app/documents/page.tsx
++++ b/src/app/(app)/documents/page.tsx
+@@ -1,5 +1,4 @@
+ import Link from "next/link";
+-import { connection } from "next/server";
+ import { Suspense } from "react";
+ import { DocumentStatusLabel, documentHref, KIND_LABEL } from "@/components/document-status";
+ import { Failed } from "@/components/ui/status";
+@@ -8,6 +7,7 @@ import { countFailedMeaningsByDocument, countOccurrencesByDocument } from "@/ser
+ import { countCandidatesByDocument } from "@/server/repo/candidates";
+ import { listDocuments } from "@/server/repo/documents";
+ import { UploadForm } from "./upload-form";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export default function DocumentsPage() {
+   return (
+@@ -22,7 +22,7 @@ export default function DocumentsPage() {
+ }
+ 
+ async function DocumentList() {
+-  await connection();
++  await requireUser();
+   const db = getDb();
+   const docs = listDocuments(db);
+   const candidateCounts = countCandidatesByDocument(db);
+diff --git a/src/app/documents/upload-form.tsx b/src/app/(app)/documents/upload-form.tsx
+similarity index 100%
+rename from src/app/documents/upload-form.tsx
+rename to src/app/(app)/documents/upload-form.tsx
+diff --git a/src/app/(app)/layout.tsx b/src/app/(app)/layout.tsx
+new file mode 100644
+index 0000000..9d6033c
+--- /dev/null
++++ b/src/app/(app)/layout.tsx
+@@ -0,0 +1,43 @@
++import { Suspense } from "react";
++import { AccountMenu } from "@/components/nav/account-menu";
++import { NavLinks, NavLinksFallback } from "@/components/nav/nav-links";
++import { getSessionUser } from "@/server/auth/current-user";
++import { getDb } from "@/server/db/client";
++import { getSettings } from "@/server/repo/settings";
++import { countStudyToday } from "@/server/repo/study";
++
++// 로그인한 사용자가 쓰는 화면들(홈, 복습, 문서, 설정, 관리자)의 공통 틀. 로그인·승인 대기·차단 화면은
++// (auth) 그룹에 있어 이 메뉴가 없다.
++
++async function TodayBadge() {
++  const user = await getSessionUser();
++  if (user?.status !== "approved") return null;
++  const db = getDb();
++  const { review, fresh } = countStudyToday(db, new Date(), getSettings(db).dailyNewLimit);
++  const total = review + fresh;
++  if (total === 0) return null;
++  return <span className="text-xs font-semibold text-accent tabular-nums">{total}</span>;
++}
++
++export default function AppLayout({ children }: LayoutProps<"/">) {
++  return (
++    <>
++      <nav className="flex h-[52px] items-center gap-1 border-b border-line bg-surface px-6">
++        <span className="mr-5 text-[13px] font-semibold tracking-[0.02em] text-muted">slave-voca</span>
++        <Suspense fallback={<NavLinksFallback />}>
++          <NavLinks
++            studyBadge={
++              <Suspense fallback={null}>
++                <TodayBadge />
++              </Suspense>
++            }
++          />
++        </Suspense>
++        <Suspense fallback={null}>
++          <AccountMenu />
++        </Suspense>
++      </nav>
++      <div className="flex-1">{children}</div>
++    </>
++  );
++}
+diff --git a/src/app/page.tsx b/src/app/(app)/page.tsx
+similarity index 98%
+rename from src/app/page.tsx
+rename to src/app/(app)/page.tsx
+index 2410a7f..d20f772 100644
+--- a/src/app/page.tsx
++++ b/src/app/(app)/page.tsx
+@@ -1,5 +1,4 @@
+ import Link from "next/link";
+-import { connection } from "next/server";
+ import { Suspense } from "react";
+ import { DocumentStatusLabel, documentHref, KIND_LABEL } from "@/components/document-status";
+ import { StartStudyButton } from "@/components/start-study-button";
+@@ -10,6 +9,7 @@ import { countCandidatesByDocument } from "@/server/repo/candidates";
+ import { listDocuments } from "@/server/repo/documents";
+ import { getSettings } from "@/server/repo/settings";
+ import { countStudyToday } from "@/server/repo/study";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ const RECENT_DOCUMENTS = 5;
+ 
+@@ -25,7 +25,7 @@ export default function Home() {
+ }
+ 
+ async function TodaySummary() {
+-  await connection();
++  await requireUser();
+   const db = getDb();
+   const now = new Date();
+   const settings = getSettings(db);
+diff --git a/src/app/settings/actions.ts b/src/app/(app)/settings/actions.ts
+similarity index 94%
+rename from src/app/settings/actions.ts
+rename to src/app/(app)/settings/actions.ts
+index 9493ae6..2c103e5 100644
+--- a/src/app/settings/actions.ts
++++ b/src/app/(app)/settings/actions.ts
+@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
+ import { parseSettingsInput, THEME_COOKIE, type SettingsErrors } from "@/lib/settings";
+ import { getDb } from "@/server/db/client";
+ import { saveSettings } from "@/server/repo/settings";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export type SaveSettingsResult =
+   | { status: "saved" }
+@@ -16,6 +17,7 @@ const ONE_YEAR = 60 * 60 * 24 * 365;
+ // 네 항목을 함께 저장한다. 하나라도 범위 밖이면 아무것도 저장하지 않는다.
+ // 테마는 쿠키에 둔다: 레이아웃의 인라인 스크립트가 첫 화면을 그리기 전에 읽는다(정적 셸을 유지).
+ export async function saveSettingsAction(input: unknown): Promise<SaveSettingsResult> {
++  await requireUser();
+   const parsed = parseSettingsInput(input);
+   if (parsed === null) return { status: "error", message: "잘못된 요청입니다." };
+   if (!parsed.ok) return { status: "invalid", errors: parsed.errors };
+diff --git a/src/app/settings/page.tsx b/src/app/(app)/settings/page.tsx
+similarity index 91%
+rename from src/app/settings/page.tsx
+rename to src/app/(app)/settings/page.tsx
+index 48b94e1..4f3a479 100644
+--- a/src/app/settings/page.tsx
++++ b/src/app/(app)/settings/page.tsx
+@@ -1,10 +1,10 @@
+ import { cookies } from "next/headers";
+-import { connection } from "next/server";
+ import { Suspense } from "react";
+ import { isTheme, THEME_COOKIE } from "@/lib/settings";
+ import { getDb } from "@/server/db/client";
+ import { getSettings } from "@/server/repo/settings";
+ import { SettingsForm } from "./settings-form";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export default function SettingsPage() {
+   return (
+@@ -18,7 +18,7 @@ export default function SettingsPage() {
+ }
+ 
+ async function CurrentSettings() {
+-  await connection();
++  await requireUser();
+   const settings = getSettings(getDb());
+   const stored = (await cookies()).get(THEME_COOKIE)?.value;
+   return <SettingsForm initial={{ ...settings, theme: isTheme(stored) ? stored : "system" }} />;
+diff --git a/src/app/settings/settings-form.tsx b/src/app/(app)/settings/settings-form.tsx
+similarity index 100%
+rename from src/app/settings/settings-form.tsx
+rename to src/app/(app)/settings/settings-form.tsx
+diff --git a/src/app/study/actions.ts b/src/app/(app)/study/actions.ts
+similarity index 94%
+rename from src/app/study/actions.ts
+rename to src/app/(app)/study/actions.ts
+index 3e862e9..015d102 100644
+--- a/src/app/study/actions.ts
++++ b/src/app/(app)/study/actions.ts
+@@ -6,6 +6,7 @@ import { ANSWERS, type Answer } from "@/lib/srs/scheduler";
+ import { isId } from "@/lib/validate";
+ import { getDb } from "@/server/db/client";
+ import { recordAnswer, StudyError, undoAnswer } from "@/server/repo/study";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export type AnswerResult =
+   | { error: string }
+@@ -14,6 +15,7 @@ export type AnswerResult =
+ // 복습 응답 하나를 저장한다. 성공하면 다음 복습 시각, 응답 뒤 상태의 간격 미리보기,
+ // 되돌리기에 쓸 기록 id를 돌려준다.
+ export async function answerCard(wordId: number, answer: Answer): Promise<AnswerResult> {
++  await requireUser();
+   if (!Number.isInteger(wordId) || !ANSWERS.includes(answer)) {
+     return { error: "잘못된 요청입니다." };
+   }
+@@ -33,6 +35,7 @@ export async function answerCard(wordId: number, answer: Answer): Promise<Answer
+ export type UndoResult = { error: null } | { error: string; rejected: boolean };
+ 
+ export async function undoLastAnswer(logId: unknown): Promise<UndoResult> {
++  await requireUser();
+   if (!isId(logId)) return { error: "잘못된 요청입니다.", rejected: true };
+   try {
+     undoAnswer(getDb(), logId);
+diff --git a/src/app/study/page.tsx b/src/app/(app)/study/page.tsx
+similarity index 90%
+rename from src/app/study/page.tsx
+rename to src/app/(app)/study/page.tsx
+index e007b09..a4151f1 100644
+--- a/src/app/study/page.tsx
++++ b/src/app/(app)/study/page.tsx
+@@ -1,9 +1,9 @@
+-import { connection } from "next/server";
+ import { Suspense } from "react";
+ import { getDb } from "@/server/db/client";
+ import { getSettings } from "@/server/repo/settings";
+ import { getStudyQueue } from "@/server/repo/study";
+ import { StudySession } from "./study-session";
++import { requireUser } from "@/server/auth/current-user";
+ 
+ export default function StudyPage() {
+   return (
+@@ -17,7 +17,7 @@ export default function StudyPage() {
+ }
+ 
+ async function TodayQueue() {
+-  await connection();
++  await requireUser();
+   const db = getDb();
+   const settings = getSettings(db);
+   const cards = getStudyQueue(db, new Date(), settings.dailyNewLimit);
+diff --git a/src/app/study/speak-button.tsx b/src/app/(app)/study/speak-button.tsx
+similarity index 100%
+rename from src/app/study/speak-button.tsx
+rename to src/app/(app)/study/speak-button.tsx
+diff --git a/src/app/study/study-session.tsx b/src/app/(app)/study/study-session.tsx
+similarity index 100%
+rename from src/app/study/study-session.tsx
+rename to src/app/(app)/study/study-session.tsx
+diff --git a/src/app/(auth)/account-status.tsx b/src/app/(auth)/account-status.tsx
+new file mode 100644
+index 0000000..1f3f4b3
+--- /dev/null
++++ b/src/app/(auth)/account-status.tsx
+@@ -0,0 +1,24 @@
++import { redirect } from "next/navigation";
++import { accessRedirect } from "@/lib/auth/policy";
++import { getSessionUser } from "@/server/auth/current-user";
++import type { UserStatus } from "@/server/db/auth-schema";
++import { SignOutButton } from "@/components/nav/sign-out-button";
++
++// 승인 대기·차단 화면의 본문. 지금 상태가 이 화면과 다르면 맞는 곳으로 보낸다(승인되면 홈으로).
++export async function AccountStatus({ expected, children }: { expected: UserStatus; children: React.ReactNode }) {
++  const user = await getSessionUser();
++  if (!user) redirect("/login");
++  if (user.status !== expected) redirect(accessRedirect(user) ?? "/");
++  return (
++    <>
++      {children}
++      <p className="mt-5 text-sm">
++        <span className="font-semibold">{user.name}</span>
++        <span className="ml-2 text-muted">{user.email}</span>
++      </p>
++      <div className="mt-4">
++        <SignOutButton />
++      </div>
++    </>
++  );
++}
+diff --git a/src/app/(auth)/blocked/page.tsx b/src/app/(auth)/blocked/page.tsx
+new file mode 100644
+index 0000000..e0f64b0
+--- /dev/null
++++ b/src/app/(auth)/blocked/page.tsx
+@@ -0,0 +1,15 @@
++import { Suspense } from "react";
++import { AccountStatus } from "../account-status";
++
++export default function BlockedPage() {
++  return (
++    <>
++      <h1 className="text-[22px] font-bold">사용할 수 없는 계정입니다</h1>
++      <Suspense fallback={<p className="mt-4 text-muted">불러오는 중…</p>}>
++        <AccountStatus expected="blocked">
++          <p className="mt-2 text-sm text-muted">관리자에게 문의해 주세요.</p>
++        </AccountStatus>
++      </Suspense>
++    </>
++  );
++}
+diff --git a/src/app/(auth)/layout.tsx b/src/app/(auth)/layout.tsx
+new file mode 100644
+index 0000000..8935e50
+--- /dev/null
++++ b/src/app/(auth)/layout.tsx
+@@ -0,0 +1,8 @@
++// 로그인·승인 대기·차단 화면의 틀. 메뉴 없이 가운데 카드 하나. 좁은 폭에서도 깨지지 않게 한다.
++export default function AuthLayout({ children }: LayoutProps<"/">) {
++  return (
++    <main className="flex flex-1 items-center justify-center px-4 py-12">
++      <div className="w-full max-w-[400px] rounded-lg border border-line bg-surface p-8 shadow-1">{children}</div>
++    </main>
++  );
++}
+diff --git a/src/app/(auth)/login/login-buttons.tsx b/src/app/(auth)/login/login-buttons.tsx
+new file mode 100644
+index 0000000..06a80ec
+--- /dev/null
++++ b/src/app/(auth)/login/login-buttons.tsx
+@@ -0,0 +1,64 @@
++"use client";
++
++import { useState } from "react";
++import { authClient } from "@/lib/auth/client";
++
++export function GoogleSignInButton({ next }: { next: string }) {
++  const [busy, setBusy] = useState(false);
++  return (
++    <button
++      type="button"
++      disabled={busy}
++      onClick={async () => {
++        setBusy(true);
++        // 성공하면 Google에서 돌아와 홈(→ 상태에 맞는 화면)으로, 실패하면 이 화면에 error를 붙여 돌아온다.
++        const { error } = await authClient.signIn.social({ provider: "google", callbackURL: next, errorCallbackURL: "/login" });
++        if (error) setBusy(false);
++      }}
++      className="w-full rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold hover:bg-sunken disabled:opacity-60"
++    >
++      Google로 계속하기
++    </button>
++  );
++}
++
++const DEV_PASSWORD = "dev-login-password";
++
++// 개발 전용 로그인: 이 컴퓨터 주소에서 AUTH_DEV_LOGIN=1일 때만 서버가 그린다. 없는 이메일은 가입시킨다.
++export function DevLoginForm({ next }: { next: string }) {
++  const [email, setEmail] = useState("");
++  const [message, setMessage] = useState("");
++  return (
++    <form
++      className="mt-6 grid gap-2 border-t border-line pt-4"
++      onSubmit={async (e) => {
++        e.preventDefault();
++        setMessage("");
++        const signIn = await authClient.signIn.email({ email, password: DEV_PASSWORD });
++        if (signIn.error) {
++          const signUp = await authClient.signUp.email({ email, password: DEV_PASSWORD, name: email.split("@")[0] });
++          if (signUp.error) return setMessage(signUp.error.message ?? "실패했습니다.");
++        }
++        // 사용자가 바뀌었으므로 화면을 통째로 다시 연다. 클라이언트 이동은 이전 화면이 겹쳐 남고,
++        // 브라우저의 라우터 캐시에 다른 사용자의 화면이 남을 수 있다.
++        window.location.assign(next);
++      }}
++    >
++      <label htmlFor="dev-email" className="text-xs font-semibold text-muted">
++        개발용 로그인(이 컴퓨터에서만)
++      </label>
++      <input
++        id="dev-email"
++        type="email"
++        required
++        value={email}
++        onChange={(e) => setEmail(e.target.value)}
++        className="rounded-md border border-line bg-surface px-3 py-2 text-sm"
++      />
++      <button type="submit" className="rounded-md bg-sunken px-3 py-2 text-sm font-semibold">
++        들어가기
++      </button>
++      {message && <p className="text-sm text-danger">{message}</p>}
++    </form>
++  );
++}
+diff --git a/src/app/(auth)/login/page.tsx b/src/app/(auth)/login/page.tsx
+new file mode 100644
+index 0000000..33a4b39
+--- /dev/null
++++ b/src/app/(auth)/login/page.tsx
+@@ -0,0 +1,40 @@
++import { redirect } from "next/navigation";
++import { connection } from "next/server";
++import { Suspense } from "react";
++import { accessRedirect, devLoginEnabled, safeNextPath } from "@/lib/auth/policy";
++import { getSessionUser } from "@/server/auth/current-user";
++import { DevLoginForm, GoogleSignInButton } from "./login-buttons";
++
++export default function LoginPage(props: PageProps<"/login">) {
++  return (
++    <>
++      <h1 className="text-[22px] font-bold">slave-voca</h1>
++      <p className="mt-2 text-sm text-muted">논문 PDF에서 어려운 단어를 뽑아 문맥 뜻 카드로 외웁니다.</p>
++      <Suspense fallback={<div className="mt-6 h-10" />}>
++        <LoginActions searchParams={props.searchParams} />
++      </Suspense>
++    </>
++  );
++}
++
++async function LoginActions({ searchParams }: { searchParams: PageProps<"/login">["searchParams"] }) {
++  await connection();
++  // 이미 로그인했으면 상태에 맞는 화면으로 보낸다.
++  const { error, next: rawNext } = await searchParams;
++  const next = safeNextPath(rawNext);
++  const user = await getSessionUser();
++  if (user) redirect(accessRedirect(user) ?? next);
++  return (
++    <>
++      {error !== undefined && (
++        <p role="alert" className="mt-4 text-sm text-danger">
++          로그인하지 못했습니다. 다시 시도해 주세요.
++        </p>
++      )}
++      <div className="mt-6">
++        <GoogleSignInButton next={next} />
++      </div>
++      {devLoginEnabled(process.env) && <DevLoginForm next={next} />}
++    </>
++  );
++}
+diff --git a/src/app/(auth)/pending/page.tsx b/src/app/(auth)/pending/page.tsx
+new file mode 100644
+index 0000000..e8b8435
+--- /dev/null
++++ b/src/app/(auth)/pending/page.tsx
+@@ -0,0 +1,17 @@
++import { Suspense } from "react";
++import { AccountStatus } from "../account-status";
++import { RefreshOnFocus } from "./refresh-on-focus";
++
++export default function PendingPage() {
++  return (
++    <>
++      <RefreshOnFocus />
++      <h1 className="text-[22px] font-bold">승인을 기다리고 있습니다</h1>
++      <Suspense fallback={<p className="mt-4 text-muted">불러오는 중…</p>}>
++        <AccountStatus expected="pending">
++          <p className="mt-2 text-sm text-muted">관리자가 승인하면 바로 쓸 수 있습니다.</p>
++        </AccountStatus>
++      </Suspense>
++    </>
++  );
++}
+diff --git a/src/app/(auth)/pending/refresh-on-focus.tsx b/src/app/(auth)/pending/refresh-on-focus.tsx
+new file mode 100644
+index 0000000..fdfa4a0
+--- /dev/null
++++ b/src/app/(auth)/pending/refresh-on-focus.tsx
+@@ -0,0 +1,22 @@
++"use client";
++
++import { useRouter } from "next/navigation";
++import { useEffect } from "react";
++
++// 탭이 다시 보일 때 한 번 다시 그려 승인됐는지 확인한다(화면 규칙 3.3). 주기적으로 묻지는 않는다.
++// 승인됐으면 서버의 AccountStatus가 홈으로 보낸다.
++export function RefreshOnFocus() {
++  const router = useRouter();
++  useEffect(() => {
++    const check = () => {
++      if (document.visibilityState === "visible") router.refresh();
++    };
++    document.addEventListener("visibilitychange", check);
++    window.addEventListener("focus", check);
++    return () => {
++      document.removeEventListener("visibilitychange", check);
++      window.removeEventListener("focus", check);
++    };
++  }, [router]);
++  return null;
++}
+diff --git a/src/app/api/auth/[...all]/route.ts b/src/app/api/auth/[...all]/route.ts
+new file mode 100644
+index 0000000..4419f68
+--- /dev/null
++++ b/src/app/api/auth/[...all]/route.ts
+@@ -0,0 +1,6 @@
++import { toNextJsHandler } from "better-auth/next-js";
++import { getAuth } from "@/server/auth/auth";
++
++// Better Auth의 로그인·콜백·로그아웃·세션 경로(/api/auth/*). 인스턴스는 요청이 올 때 만든다.
++export const GET = (request: Request) => toNextJsHandler(getAuth()).GET(request);
++export const POST = (request: Request) => toNextJsHandler(getAuth()).POST(request);
+diff --git a/src/app/api/usage-meaning/route.ts b/src/app/api/usage-meaning/route.ts
+index 05e15b7..029f0b1 100644
+--- a/src/app/api/usage-meaning/route.ts
++++ b/src/app/api/usage-meaning/route.ts
+@@ -1,5 +1,6 @@
+ import { revalidatePath } from "next/cache";
+ import { isId, isJsonContentType } from "@/lib/validate";
++import { getSessionUser } from "@/server/auth/current-user";
+ import { getDb } from "@/server/db/client";
+ import { defaultMeaningModel } from "@/server/services/enrich";
+ import { regenerateUsageMeaning } from "@/server/services/usage-meaning";
+@@ -7,6 +8,9 @@ import { regenerateUsageMeaning } from "@/server/services/usage-meaning";
+ // 복습 카드 뒷면의 "뜻 다시 만들기". Server Action이 아닌 Route Handler인 이유: 한 클라이언트의 Server Action은
+ // 차례로 실행되어, 뜻을 만드는 몇 초 동안 1·2·3 응답 저장이 줄을 서 버린다. fetch는 그 줄에 들어가지 않는다.
+ export async function POST(request: Request) {
++  // 화면처럼 보내 버릴 수 없으므로 승인된 사용자가 아니면 401로 답한다.
++  const user = await getSessionUser();
++  if (user?.status !== "approved") return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
+   // 다른 사이트가 보낸 요청을 거르려고 Content-Type이 정확히 application/json인 것만 받는다(그 형식의 교차 출처
+   // 요청은 브라우저가 사전 확인(preflight)을 거치고, 이 앱은 CORS를 열지 않는다).
+   if (!isJsonContentType(request.headers.get("content-type"))) {
+diff --git a/src/app/layout.tsx b/src/app/layout.tsx
+index 697c0e2..dc7e918 100644
+--- a/src/app/layout.tsx
++++ b/src/app/layout.tsx
+@@ -1,14 +1,8 @@
+ import type { Metadata } from "next";
+ import { Gentium_Book_Plus } from "next/font/google";
+ import localFont from "next/font/local";
+-import { connection } from "next/server";
+-import { Suspense } from "react";
+-import { NavLinks, NavLinksFallback } from "@/components/nav/nav-links";
+ import { ThemeSync } from "@/components/theme-sync";
+ import { THEME_SCRIPT } from "@/lib/ui/theme";
+-import { getDb } from "@/server/db/client";
+-import { getSettings } from "@/server/repo/settings";
+-import { countStudyToday } from "@/server/repo/study";
+ import "./globals.css";
+ 
+ // 한글·UI. Google Fonts에 없어 npm 패키지의 가변 글꼴을 직접 올린다(약 2MB, 배포 시 subset 검토).
+@@ -33,15 +27,6 @@ export const metadata: Metadata = {
+   description: "논문·발표 자료 단어장",
+ };
+ 
+-async function TodayBadge() {
+-  await connection();
+-  const db = getDb();
+-  const { review, fresh } = countStudyToday(db, new Date(), getSettings(db).dailyNewLimit);
+-  const total = review + fresh;
+-  if (total === 0) return null;
+-  return <span className="text-xs font-semibold text-accent tabular-nums">{total}</span>;
+-}
+-
+ export default function RootLayout({ children }: LayoutProps<"/">) {
+   return (
+     // data-theme는 <head>의 인라인 스크립트가 붙인다(쿠키). React가 모르는 속성이라 경고를 끈다.
+@@ -51,19 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
+       </head>
+       <body className="flex min-h-full flex-col">
+         <ThemeSync />
+-        <nav className="flex h-[52px] items-center gap-1 border-b border-line bg-surface px-6">
+-          <span className="mr-5 text-[13px] font-semibold tracking-[0.02em] text-muted">slave-voca</span>
+-          <Suspense fallback={<NavLinksFallback />}>
+-            <NavLinks
+-              studyBadge={
+-                <Suspense fallback={null}>
+-                  <TodayBadge />
+-                </Suspense>
+-              }
+-            />
+-          </Suspense>
+-        </nav>
+-        <div className="flex-1">{children}</div>
++        {children}
+       </body>
+     </html>
+   );
+diff --git a/src/components/nav/account-menu.tsx b/src/components/nav/account-menu.tsx
+new file mode 100644
+index 0000000..7bc1221
+--- /dev/null
++++ b/src/components/nav/account-menu.tsx
+@@ -0,0 +1,27 @@
++import Link from "next/link";
++import { getSessionUser } from "@/server/auth/current-user";
++import { getDb } from "@/server/db/client";
++import { countPendingUsers } from "@/server/repo/users";
++import { SignOutButton } from "./sign-out-button";
++
++// 상단 바 오른쪽: 로그인한 사람, 관리자 화면(관리자만, 승인 대기 수 배지), 로그아웃.
++// 세션을 읽으므로 레이아웃의 <Suspense> 안에서 그린다. 화면 규칙은 Designer 안을 따른다(M6-1 설계 4장).
++export async function AccountMenu() {
++  const user = await getSessionUser();
++  if (user?.status !== "approved") return null;
++  const pending = user.role === "admin" ? countPendingUsers(getDb()) : 0;
++  return (
++    <div className="ml-3 flex items-center gap-2 text-sm">
++      {user.role === "admin" && (
++        <Link href="/admin" className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-ink-2 hover:bg-sunken">
++          관리
++          {pending > 0 && <span className="text-xs font-semibold text-accent tabular-nums">{pending}</span>}
++        </Link>
++      )}
++      <span className="max-w-[16ch] truncate text-muted" title={user.email}>
++        {user.name || user.email}
++      </span>
++      <SignOutButton />
++    </div>
++  );
++}
+diff --git a/src/components/nav/sign-out-button.tsx b/src/components/nav/sign-out-button.tsx
+new file mode 100644
+index 0000000..63c64d5
+--- /dev/null
++++ b/src/components/nav/sign-out-button.tsx
+@@ -0,0 +1,25 @@
++"use client";
++
++import { useState } from "react";
++import { authClient } from "@/lib/auth/client";
++
++// 로그아웃하면 세션 쿠키를 지우고 로그인 화면으로 간다.
++export function SignOutButton() {
++  const [busy, setBusy] = useState(false);
++  return (
++    <button
++      type="button"
++      disabled={busy}
++      onClick={async () => {
++        setBusy(true);
++        await authClient.signOut();
++        // 이 사용자의 화면이 브라우저 라우터 캐시에 남지 않도록 화면을 통째로 다시 연다.
++        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
++        window.location.assign("/login");
++      }}
++      className="rounded-md px-3 py-1.5 text-ink-2 hover:bg-sunken disabled:opacity-60"
++    >
++      로그아웃
++    </button>
++  );
++}
+diff --git a/src/lib/auth/client.ts b/src/lib/auth/client.ts
+new file mode 100644
+index 0000000..d944a8f
+--- /dev/null
++++ b/src/lib/auth/client.ts
+@@ -0,0 +1,4 @@
++import { createAuthClient } from "better-auth/react";
++
++// 브라우저에서 쓰는 Better Auth 클라이언트. 같은 주소의 /api/auth를 부른다.
++export const authClient = createAuthClient();
+diff --git a/src/proxy.ts b/src/proxy.ts
+new file mode 100644
+index 0000000..2af1f6b
+--- /dev/null
++++ b/src/proxy.ts
+@@ -0,0 +1,18 @@
++import { getSessionCookie } from "better-auth/cookies";
++import { NextResponse, type NextRequest } from "next/server";
++
++// 세션 쿠키가 아예 없으면 화면을 그리기 전에 로그인으로 보낸다(빠른 1차 확인).
++// 쿠키가 있어도 가짜·만료일 수 있으므로, 진짜 확인은 화면·Action의 requireUser()가 한다.
++export function proxy(request: NextRequest) {
++  if (getSessionCookie(request)) return NextResponse.next();
++  // 로그인한 뒤 원래 가려던 곳으로 돌려보낸다(화면 규칙 2.4). 홈이면 붙이지 않는다.
++  const login = new URL("/login", request.url);
++  const next = request.nextUrl.pathname + request.nextUrl.search;
++  if (next !== "/") login.searchParams.set("next", next);
++  return NextResponse.redirect(login);
++}
++
++export const config = {
++  // API(자체 확인), Next 정적 파일, 로그인·승인 대기·차단 화면은 제외한다.
++  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|login|pending|blocked).*)"],
++};

@@ -1,0 +1,1293 @@
+diff --git a/tests/helpers/users.ts b/tests/helpers/users.ts
+new file mode 100644
+index 0000000..e334a3b
+--- /dev/null
++++ b/tests/helpers/users.ts
+@@ -0,0 +1,13 @@
++import type { Db } from '@/server/db/client';
++import { users } from '@/server/db/schema';
++
++// 테스트용 사용자. 데이터는 모두 주인이 있어야 하므로(M6-2) 메모리 DB를 만든 뒤 넣는다.
++export const USER = 'user-a';
++export const OTHER = 'user-b';
++
++export function addUser(db: Db, id: string = USER): string {
++  db.insert(users)
++    .values({ id, name: id, email: `${id}@example.com`, status: 'approved' })
++    .run();
++  return id;
++}
+diff --git a/tests/server/card-edits.test.ts b/tests/server/card-edits.test.ts
+index b6db4b7..fc8f910 100644
+--- a/tests/server/card-edits.test.ts
++++ b/tests/server/card-edits.test.ts
+@@ -1,4 +1,5 @@
+ import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, USER } from '../helpers/users';
+ import { createDb, type Db } from '@/server/db/client';
+ import { knownWords, occurrences, reviewLogs, words } from '@/server/db/schema';
+ import {
+@@ -18,11 +19,12 @@ import { recordAnswer } from '@/server/repo/study';
+ let db: Db;
+ beforeEach(() => {
+   db = createDb(':memory:');
++  addUser(db);
+ });
+ 
+ // 문서 하나를 만들어 lemmas를 모두 카드로 저장한다.
+ function savedDocument(title: string, lemmas: string[]) {
+-  const doc = createDocument(db, { title, kind: 'paper' });
++  const doc = createDocument(db, USER, { title, kind: 'paper' });
+   replaceCandidates(
+     db,
+     doc.id,
+@@ -36,7 +38,7 @@ function savedDocument(title: string, lemmas: string[]) {
+     })),
+   );
+   updateDocumentStatus(db, doc.id, 'reviewing');
+-  const saved = saveReviewSelection(db, doc.id, listCandidates(db, doc.id).map((c) => c.id));
++  const saved = saveReviewSelection(db, USER, doc.id, listCandidates(db, USER, doc.id).map((c) => c.id));
+   return { doc, saved };
+ }
+ 
+@@ -44,8 +46,8 @@ describe('getOccurrenceMeaning', () => {
+   it('returns the current meaning and status, or undefined', () => {
+     const { saved } = savedDocument('A', ['progression']);
+     markMeaningsFailed(db, saved.occurrenceIds);
+-    expect(getOccurrenceMeaning(db, saved.occurrenceIds[0])).toEqual({ meaningKo: null, meaningStatus: 'failed' });
+-    expect(getOccurrenceMeaning(db, 999)).toBeUndefined();
++    expect(getOccurrenceMeaning(db, USER, saved.occurrenceIds[0])).toEqual({ meaningKo: null, meaningStatus: 'failed' });
++    expect(getOccurrenceMeaning(db, USER, 999)).toBeUndefined();
+   });
+ });
+ 
+@@ -54,17 +56,17 @@ describe('listFailedMeaningIds and occurrencesBelongTo', () => {
+     const a = savedDocument('A', ['alpha', 'beta']);
+     const b = savedDocument('B', ['gamma']);
+     markMeaningsFailed(db, [a.saved.occurrenceIds[1], b.saved.occurrenceIds[0]]);
+-    expect(listFailedMeaningIds(db, a.doc.id)).toEqual([a.saved.occurrenceIds[1]]);
++    expect(listFailedMeaningIds(db, USER, a.doc.id)).toEqual([a.saved.occurrenceIds[1]]);
+   });
+ 
+   it('checks that every id belongs to the document', () => {
+     const a = savedDocument('A', ['alpha', 'beta']);
+     const b = savedDocument('B', ['gamma']);
+-    expect(occurrencesBelongTo(db, a.doc.id, a.saved.occurrenceIds)).toBe(true);
+-    expect(occurrencesBelongTo(db, a.doc.id, [a.saved.occurrenceIds[0], b.saved.occurrenceIds[0]])).toBe(
++    expect(occurrencesBelongTo(db, USER, a.doc.id, a.saved.occurrenceIds)).toBe(true);
++    expect(occurrencesBelongTo(db, USER, a.doc.id, [a.saved.occurrenceIds[0], b.saved.occurrenceIds[0]])).toBe(
+       false,
+     );
+-    expect(occurrencesBelongTo(db, a.doc.id, [])).toBe(true);
++    expect(occurrencesBelongTo(db, USER, a.doc.id, [])).toBe(true);
+   });
+ });
+ 
+@@ -73,18 +75,18 @@ describe('deleteCard', () => {
+     const a = savedDocument('A', ['robust', 'paradigm']);
+     savedDocument('B', ['robust']);
+     const robust = db.select().from(words).all().find((w) => w.lemma === 'robust')!;
+-    recordAnswer(db, robust.id, 'good', new Date());
+-    expect(countOccurrencesByWord(db, [robust.id]).get(robust.id)).toBe(2);
++    recordAnswer(db, USER, robust.id, 'good', new Date());
++    expect(countOccurrencesByWord(db, USER, [robust.id]).get(robust.id)).toBe(2);
+ 
+-    expect(deleteCard(db, robust.id)).toBe(true);
++    expect(deleteCard(db, USER, robust.id)).toBe(true);
+     expect(db.select().from(words).all().map((w) => w.lemma)).toEqual(['paradigm']);
+     expect(db.select().from(occurrences).all()).toHaveLength(1);
+     expect(db.select().from(reviewLogs).all()).toEqual([]);
+     expect(db.select().from(knownWords).all()).toEqual([]);
+-    expect(listOccurrencesByDocument(db, a.doc.id).map((r) => r.lemma)).toEqual(['paradigm']);
++    expect(listOccurrencesByDocument(db, USER, a.doc.id).map((r) => r.lemma)).toEqual(['paradigm']);
+   });
+ 
+   it('returns false for a missing card', () => {
+-    expect(deleteCard(db, 999)).toBe(false);
++    expect(deleteCard(db, USER, 999)).toBe(false);
+   });
+ });
+diff --git a/tests/server/cards.test.ts b/tests/server/cards.test.ts
+index 55833c5..06c40ea 100644
+--- a/tests/server/cards.test.ts
++++ b/tests/server/cards.test.ts
+@@ -1,4 +1,5 @@
+ import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, USER } from '../helpers/users';
+ import { createDb, type Db } from '@/server/db/client';
+ import { knownWords, occurrences, words } from '@/server/db/schema';
+ import {
+@@ -28,32 +29,33 @@ const candidate = (lemma: string, isExisting = false) => ({
+ let db: Db;
+ beforeEach(() => {
+   db = createDb(':memory:');
++  addUser(db);
+ });
+ 
+ function reviewingDocument(list: ReturnType<typeof candidate>[]) {
+-  const doc = createDocument(db, { title: 'Paper', kind: 'paper' });
++  const doc = createDocument(db, USER, { title: 'Paper', kind: 'paper' });
+   replaceCandidates(db, doc.id, list);
+   updateDocumentStatus(db, doc.id, 'reviewing');
+-  const ids = new Map(listCandidates(db, doc.id).map((c) => [c.lemma, c.id]));
++  const ids = new Map(listCandidates(db, USER, doc.id).map((c) => [c.lemma, c.id]));
+   return { doc, ids };
+ }
+ 
+ describe('saveReviewSelection', () => {
+   it('turns selected candidates into cards and the rest into known words', () => {
+     const { doc, ids } = reviewingDocument([candidate('robust'), candidate('paradigm')]);
+-    const saved = saveReviewSelection(db, doc.id, [ids.get('robust')!]);
++    const saved = saveReviewSelection(db, USER, doc.id, [ids.get('robust')!]);
+ 
+     expect(saved.occurrenceIds).toHaveLength(1);
+     expect(db.select().from(words).all().map((w) => w.lemma)).toEqual(['robust']);
+     expect(db.select().from(knownWords).all().map((k) => k.lemma)).toEqual(['paradigm']);
+-    expect(listCandidates(db, doc.id)).toEqual([]);
+-    expect(getDocument(db, doc.id)?.status).toBe('processing');
++    expect(listCandidates(db, USER, doc.id)).toEqual([]);
++    expect(getDocument(db, USER, doc.id)?.status).toBe('processing');
+   });
+ 
+   it('reuses an existing card and only adds a new occurrence', () => {
+-    db.insert(words).values({ lemma: 'robust', phonetic: '/rəʊˈbʌst/' }).run();
++    db.insert(words).values({ userId: USER, lemma: 'robust', phonetic: '/rəʊˈbʌst/' }).run();
+     const { doc, ids } = reviewingDocument([candidate('robust', true)]);
+-    saveReviewSelection(db, doc.id, [ids.get('robust')!]);
++    saveReviewSelection(db, USER, doc.id, [ids.get('robust')!]);
+ 
+     expect(db.select().from(words).all()).toHaveLength(1);
+     expect(db.select().from(occurrences).all()).toHaveLength(1);
+@@ -63,8 +65,8 @@ describe('saveReviewSelection', () => {
+     // A와 B가 둘 다 검토 대기 중일 때 A에서 저장하면, B의 isExisting은 여전히 false다.
+     const a = reviewingDocument([candidate('invariance')]);
+     const b = reviewingDocument([candidate('invariance')]);
+-    saveReviewSelection(db, a.doc.id, [a.ids.get('invariance')!]);
+-    saveReviewSelection(db, b.doc.id, []);
++    saveReviewSelection(db, USER, a.doc.id, [a.ids.get('invariance')!]);
++    saveReviewSelection(db, USER, b.doc.id, []);
+     expect(db.select().from(words).all().map((w) => w.lemma)).toEqual(['invariance']);
+     expect(db.select().from(knownWords).all()).toEqual([]);
+   });
+@@ -72,39 +74,39 @@ describe('saveReviewSelection', () => {
+   it('lets a selection win over a known word registered by another document', () => {
+     const a = reviewingDocument([candidate('invariance')]);
+     const b = reviewingDocument([candidate('invariance')]);
+-    saveReviewSelection(db, a.doc.id, []);
+-    saveReviewSelection(db, b.doc.id, [b.ids.get('invariance')!]);
++    saveReviewSelection(db, USER, a.doc.id, []);
++    saveReviewSelection(db, USER, b.doc.id, [b.ids.get('invariance')!]);
+     expect(db.select().from(words).all().map((w) => w.lemma)).toEqual(['invariance']);
+     expect(db.select().from(knownWords).all()).toEqual([]);
+   });
+ 
+   it('does not mark an existing card as known when it is unselected', () => {
+-    db.insert(words).values({ lemma: 'robust' }).run();
++    db.insert(words).values({ userId: USER, lemma: 'robust' }).run();
+     const { doc } = reviewingDocument([candidate('robust', true)]);
+-    saveReviewSelection(db, doc.id, []);
++    saveReviewSelection(db, USER, doc.id, []);
+     expect(db.select().from(knownWords).all()).toEqual([]);
+   });
+ 
+   it('ignores ids that are not candidates of this document', () => {
+     const { doc } = reviewingDocument([candidate('robust')]);
+-    const saved = saveReviewSelection(db, doc.id, [9999]);
++    const saved = saveReviewSelection(db, USER, doc.id, [9999]);
+     expect(saved.occurrenceIds).toEqual([]);
+   });
+ 
+   it('refuses to save the same document twice', () => {
+     const { doc, ids } = reviewingDocument([candidate('robust')]);
+-    saveReviewSelection(db, doc.id, [ids.get('robust')!]);
+-    expect(() => saveReviewSelection(db, doc.id, [])).toThrow(ReviewError);
+-    expect(() => saveReviewSelection(db, 12345, [])).toThrow('문서를 찾을 수 없습니다.');
++    saveReviewSelection(db, USER, doc.id, [ids.get('robust')!]);
++    expect(() => saveReviewSelection(db, USER, doc.id, [])).toThrow(ReviewError);
++    expect(() => saveReviewSelection(db, USER, 12345, [])).toThrow('문서를 찾을 수 없습니다.');
+   });
+ });
+ 
+ describe('meaning and phonetic updates', () => {
+   it('lists requests, stores meanings and failures, and shows them per document', () => {
+     const { doc, ids } = reviewingDocument([candidate('robust'), candidate('paradigm')]);
+-    const saved = saveReviewSelection(db, doc.id, [...ids.values()]);
++    const saved = saveReviewSelection(db, USER, doc.id, [...ids.values()]);
+ 
+-    const requests = listMeaningRequests(db, saved.occurrenceIds);
++    const requests = listMeaningRequests(db, USER, saved.occurrenceIds);
+     expect(requests.map((r) => r.lemma).sort()).toEqual(['paradigm', 'robust']);
+ 
+     const robust = requests.find((r) => r.lemma === 'robust')!;
+@@ -116,7 +118,7 @@ describe('meaning and phonetic updates', () => {
+     expect(missing).toHaveLength(2);
+     setPhonetic(db, missing.find((w) => w.lemma === 'robust')!.id, '/rəʊˈbʌst/');
+ 
+-    expect(listOccurrencesByDocument(db, doc.id)).toMatchObject([
++    expect(listOccurrencesByDocument(db, USER, doc.id)).toMatchObject([
+       { lemma: 'paradigm', meaningStatus: 'failed', meaningKo: null, phonetic: null },
+       { lemma: 'robust', meaningStatus: 'done', meaningKo: '견고한', phonetic: '/rəʊˈbʌst/' },
+     ]);
+@@ -124,21 +126,21 @@ describe('meaning and phonetic updates', () => {
+ 
+   it('counts saved occurrences per document', () => {
+     const { doc, ids } = reviewingDocument([candidate('robust'), candidate('paradigm')]);
+-    saveReviewSelection(db, doc.id, [...ids.values()]);
+-    expect(countOccurrencesByDocument(db).get(doc.id)).toBe(2);
++    saveReviewSelection(db, USER, doc.id, [...ids.values()]);
++    expect(countOccurrencesByDocument(db, USER).get(doc.id)).toBe(2);
+   });
+ 
+   it('counts failed meanings per document', () => {
+     const { doc, ids } = reviewingDocument([candidate('robust'), candidate('paradigm')]);
+-    const saved = saveReviewSelection(db, doc.id, [...ids.values()]);
++    const saved = saveReviewSelection(db, USER, doc.id, [...ids.values()]);
+     markMeaningsFailed(db, saved.occurrenceIds.slice(0, 1));
+-    expect(countFailedMeaningsByDocument(db).get(doc.id)).toBe(1);
+-    expect(countFailedMeaningsByDocument(db).get(doc.id + 1)).toBeUndefined();
++    expect(countFailedMeaningsByDocument(db, USER).get(doc.id)).toBe(1);
++    expect(countFailedMeaningsByDocument(db, USER).get(doc.id + 1)).toBeUndefined();
+   });
+ 
+ 
+   it('returns empty lists for empty id lists', () => {
+-    expect(listMeaningRequests(db, [])).toEqual([]);
++    expect(listMeaningRequests(db, USER, [])).toEqual([]);
+     expect(listWordsMissingPhonetic(db, [])).toEqual([]);
+     markMeaningsFailed(db, []);
+   });
+diff --git a/tests/server/enrich.test.ts b/tests/server/enrich.test.ts
+index c885b1b..82481a2 100644
+--- a/tests/server/enrich.test.ts
++++ b/tests/server/enrich.test.ts
+@@ -1,4 +1,5 @@
+ import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, USER } from '../helpers/users';
+ import { createDb, type Db } from '@/server/db/client';
+ import { words } from '@/server/db/schema';
+ import { listOccurrencesByDocument, saveReviewSelection } from '@/server/repo/cards';
+@@ -9,10 +10,11 @@ import { enrichDocument, type EnrichDeps } from '@/server/services/enrich';
+ let db: Db;
+ beforeEach(() => {
+   db = createDb(':memory:');
++  addUser(db);
+ });
+ 
+ function savedDocument(lemmas: string[]) {
+-  const doc = createDocument(db, { title: 'Paper', kind: 'paper' });
++  const doc = createDocument(db, USER, { title: 'Paper', kind: 'paper' });
+   replaceCandidates(
+     db,
+     doc.id,
+@@ -26,8 +28,8 @@ function savedDocument(lemmas: string[]) {
+     })),
+   );
+   updateDocumentStatus(db, doc.id, 'reviewing');
+-  const ids = listCandidates(db, doc.id).map((c) => c.id);
+-  return { doc, saved: saveReviewSelection(db, doc.id, ids) };
++  const ids = listCandidates(db, USER, doc.id).map((c) => c.id);
++  return { doc, saved: saveReviewSelection(db, USER, doc.id, ids) };
+ }
+ 
+ const deps = (overrides: Partial<EnrichDeps> = {}): EnrichDeps => ({
+@@ -39,24 +41,24 @@ const deps = (overrides: Partial<EnrichDeps> = {}): EnrichDeps => ({
+ describe('enrichDocument', () => {
+   it('fills meanings and phonetics, then marks the document done', async () => {
+     const { doc, saved } = savedDocument(['robust', 'paradigm']);
+-    await enrichDocument(db, doc.id, saved, deps());
++    await enrichDocument(db, USER, doc.id, saved, deps());
+ 
+-    expect(listOccurrencesByDocument(db, doc.id)).toMatchObject([
++    expect(listOccurrencesByDocument(db, USER, doc.id)).toMatchObject([
+       { lemma: 'paradigm', meaningKo: 'paradigm의 뜻', meaningStatus: 'done', phonetic: null },
+       { lemma: 'robust', meaningKo: 'robust의 뜻', meaningStatus: 'done', phonetic: '/rəʊˈbʌst/' },
+     ]);
+-    expect(getDocument(db, doc.id)?.status).toBe('done');
++    expect(getDocument(db, USER, doc.id)?.status).toBe('done');
+   });
+ 
+   it('marks every meaning failed when there is no API key', async () => {
+     const { doc, saved } = savedDocument(['robust']);
+-    await enrichDocument(db, doc.id, saved, deps({ meaningModel: null }));
++    await enrichDocument(db, USER, doc.id, saved, deps({ meaningModel: null }));
+ 
+-    expect(listOccurrencesByDocument(db, doc.id)[0]).toMatchObject({
++    expect(listOccurrencesByDocument(db, USER, doc.id)[0]).toMatchObject({
+       meaningStatus: 'failed',
+       phonetic: '/rəʊˈbʌst/',
+     });
+-    expect(getDocument(db, doc.id)?.status).toBe('done');
++    expect(getDocument(db, USER, doc.id)?.status).toBe('done');
+   });
+ 
+   it('marks the document error and pending meanings failed when enrichment throws', async () => {
+@@ -65,13 +67,13 @@ describe('enrichDocument', () => {
+     const broken = deps({
+       meaningModel: async (batch) => batch.map((r) => ({ id: r.id }) as { id: number; meaningKo: string }),
+     });
+-    await enrichDocument(db, doc.id, saved, broken);
++    await enrichDocument(db, USER, doc.id, saved, broken);
+ 
+-    expect(getDocument(db, doc.id)).toMatchObject({
++    expect(getDocument(db, USER, doc.id)).toMatchObject({
+       status: 'error',
+       errorMessage: '뜻과 발음을 채우지 못했습니다.',
+     });
+-    const rows = listOccurrencesByDocument(db, doc.id);
++    const rows = listOccurrencesByDocument(db, USER, doc.id);
+     expect(rows.map((r) => r.meaningStatus)).toEqual(['failed', 'failed']);
+     expect(db.select().from(words).all()).toHaveLength(2); // 저장된 카드는 그대로 둔다
+   });
+@@ -80,6 +82,7 @@ describe('enrichDocument', () => {
+     const { doc, saved } = savedDocument(['robust']);
+     await enrichDocument(
+       db,
++      USER,
+       doc.id,
+       saved,
+       deps({
+@@ -89,16 +92,17 @@ describe('enrichDocument', () => {
+       }),
+     );
+ 
+-    expect(getDocument(db, doc.id)?.status).toBe('error');
+-    expect(listOccurrencesByDocument(db, doc.id)[0].meaningStatus).toBe('done');
++    expect(getDocument(db, USER, doc.id)?.status).toBe('error');
++    expect(listOccurrencesByDocument(db, USER, doc.id)[0].meaningStatus).toBe('done');
+   });
+ 
+   it('skips phonetic lookups for words that already have one', async () => {
+-    db.insert(words).values({ lemma: 'robust', phonetic: '/old/' }).run();
++    db.insert(words).values({ userId: USER, lemma: 'robust', phonetic: '/old/' }).run();
+     const { doc, saved } = savedDocument(['robust']);
+     const looked: string[] = [];
+     await enrichDocument(
+       db,
++      USER,
+       doc.id,
+       saved,
+       deps({
+@@ -109,6 +113,6 @@ describe('enrichDocument', () => {
+       }),
+     );
+     expect(looked).toEqual([]);
+-    expect(listOccurrencesByDocument(db, doc.id)[0].phonetic).toBe('/old/');
++    expect(listOccurrencesByDocument(db, USER, doc.id)[0].phonetic).toBe('/old/');
+   });
+ });
+diff --git a/tests/server/ingest.test.ts b/tests/server/ingest.test.ts
+index e45a655..84a05a7 100644
+--- a/tests/server/ingest.test.ts
++++ b/tests/server/ingest.test.ts
+@@ -1,4 +1,5 @@
+ import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, USER } from '../helpers/users';
+ import { createDb, type Db } from '@/server/db/client';
+ import { knownWords } from '@/server/db/schema';
+ import { listCandidates } from '@/server/repo/candidates';
+@@ -22,6 +23,7 @@ const PAPER = [
+ let db: Db;
+ beforeEach(() => {
+   db = createDb(':memory:');
++  addUser(db);
+ });
+ 
+ const input = (bytes: Uint8Array, title = '') => ({
+@@ -33,9 +35,9 @@ const input = (bytes: Uint8Array, title = '') => ({
+ 
+ describe('ingestPdf', () => {
+   it('stores candidates and moves the document to reviewing', async () => {
+-    const result = await ingestPdf(db, input(makePdf([PAPER])));
++    const result = await ingestPdf(db, USER, input(makePdf([PAPER])));
+     expect(result.status).toBe('reviewing');
+-    const lemmas = listCandidates(db, result.documentId).map((c) => c.lemma);
++    const lemmas = listCandidates(db, USER, result.documentId).map((c) => c.lemma);
+     expect(lemmas).toContain('heterogeneous');
+     expect(lemmas).toContain('perturbation');
+     expect(lemmas).not.toContain('paper');
+@@ -52,8 +54,8 @@ describe('ingestPdf', () => {
+         'variance of the estimator holds.',
+       ],
+     ]);
+-    const result = await ingestPdf(db, input(pdf));
+-    const byLemma = new Map(listCandidates(db, result.documentId).map((c) => [c.lemma, c]));
++    const result = await ingestPdf(db, USER, input(pdf));
++    const byLemma = new Map(listCandidates(db, USER, result.documentId).map((c) => [c.lemma, c]));
+     expect(byLemma.has('hence')).toBe(true); // wordfreq 순위 3,687, 기본 기준 N=3,000 밖
+     expect(byLemma.get('conv')?.inDictionary).toBe(false);
+     expect(byLemma.get('heterogeneous')?.inDictionary).toBe(true);
+@@ -67,53 +69,53 @@ describe('ingestPdf', () => {
+     const withJunk = new Uint8Array(pdf.length + 3);
+     withJunk.set([0xef, 0xbb, 0xbf]);
+     withJunk.set(pdf, 3);
+-    const result = await ingestPdf(db, input(withJunk));
++    const result = await ingestPdf(db, USER, input(withJunk));
+     expect(result.status).toBe('reviewing');
+   });
+ 
+   it('uses the file name when the title is blank', async () => {
+-    const result = await ingestPdf(db, input(makePdf([PAPER]), '   '));
+-    expect(getDocument(db, result.documentId)?.title).toBe('attention');
++    const result = await ingestPdf(db, USER, input(makePdf([PAPER]), '   '));
++    expect(getDocument(db, USER, result.documentId)?.title).toBe('attention');
+   });
+ 
+   it('skips lemmas the user already knows', async () => {
+-    db.insert(knownWords).values({ lemma: 'heterogeneous' }).run();
+-    const result = await ingestPdf(db, input(makePdf([PAPER])));
+-    const lemmas = listCandidates(db, result.documentId).map((c) => c.lemma);
++    db.insert(knownWords).values({ userId: USER, lemma: 'heterogeneous' }).run();
++    const result = await ingestPdf(db, USER, input(makePdf([PAPER])));
++    const lemmas = listCandidates(db, USER, result.documentId).map((c) => c.lemma);
+     expect(lemmas).not.toContain('heterogeneous');
+   });
+ 
+   it('marks the document done when nothing is left to learn', async () => {
+     const common = Array(6).fill('The people of the world have a good time and work.');
+-    const result = await ingestPdf(db, input(makePdf([common])));
++    const result = await ingestPdf(db, USER, input(makePdf([common])));
+     expect(result.status).toBe('done');
+-    expect(listCandidates(db, result.documentId)).toEqual([]);
++    expect(listCandidates(db, USER, result.documentId)).toEqual([]);
+   });
+ 
+   it('records a readable error for a PDF without text', async () => {
+-    const result = await ingestPdf(db, input(makePdf([['Figure 1']])));
++    const result = await ingestPdf(db, USER, input(makePdf([['Figure 1']])));
+     expect(result.status).toBe('error');
+-    expect(getDocument(db, result.documentId)?.errorMessage).toContain('스캔 PDF');
++    expect(getDocument(db, USER, result.documentId)?.errorMessage).toContain('스캔 PDF');
+   });
+ 
+   it('records a generic error for a corrupt PDF', async () => {
+     const corrupt = new TextEncoder().encode('%PDF-1.4\nthis is not really a pdf');
+-    const result = await ingestPdf(db, input(corrupt));
++    const result = await ingestPdf(db, USER, input(corrupt));
+     expect(result.status).toBe('error');
+-    expect(getDocument(db, result.documentId)?.errorMessage).toBe('PDF를 처리하지 못했습니다.');
++    expect(getDocument(db, USER, result.documentId)?.errorMessage).toBe('PDF를 처리하지 못했습니다.');
+   });
+ 
+   it('rejects files that are not PDFs without creating a document', async () => {
+     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+-    await expect(ingestPdf(db, input(png))).rejects.toThrow('PDF 파일이 아닙니다.');
+-    expect(listDocuments(db)).toEqual([]);
++    await expect(ingestPdf(db, USER, input(png))).rejects.toThrow('PDF 파일이 아닙니다.');
++    expect(listDocuments(db, USER)).toEqual([]);
+   });
+ 
+   it('rejects empty and oversized files', async () => {
+-    await expect(ingestPdf(db, input(new Uint8Array()))).rejects.toBeInstanceOf(UploadError);
++    await expect(ingestPdf(db, USER, input(new Uint8Array()))).rejects.toBeInstanceOf(UploadError);
+     const huge = new Uint8Array(MAX_PDF_BYTES + 1);
+     huge.set(new TextEncoder().encode('%PDF-'));
+-    await expect(ingestPdf(db, input(huge))).rejects.toThrow('50MB');
++    await expect(ingestPdf(db, USER, input(huge))).rejects.toThrow('50MB');
+   });
+ });
+ 
+diff --git a/tests/server/isolation.test.ts b/tests/server/isolation.test.ts
+new file mode 100644
+index 0000000..f2e6727
+--- /dev/null
++++ b/tests/server/isolation.test.ts
+@@ -0,0 +1,156 @@
++import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, OTHER, USER } from '../helpers/users';
++import { makePdf } from '../helpers/make-pdf';
++import type { MeaningModel } from '@/lib/meaning/generate';
++import { createDb, type Db } from '@/server/db/client';
++import { reviewLogs, words } from '@/server/db/schema';
++import {
++  countFailedMeaningsByDocument,
++  countOccurrencesByDocument,
++  countOccurrencesByWord,
++  deleteCard,
++  getOccurrenceMeaning,
++  listFailedMeaningIds,
++  listMeaningRequests,
++  listOccurrencesByDocument,
++  markMeaningsFailed,
++  occurrencesBelongTo,
++  ReviewError,
++  saveReviewSelection,
++} from '@/server/repo/cards';
++import { countCandidatesByDocument, listCandidates, replaceCandidates } from '@/server/repo/candidates';
++import { createDocument, getDocument, listDocuments, updateDocumentStatus } from '@/server/repo/documents';
++import { getSettings, saveSettings } from '@/server/repo/settings';
++import { countStudyToday, getStudyQueue, recordAnswer, StudyError, undoAnswer } from '@/server/repo/study';
++import { listKnownLemmas, listWordLemmas } from '@/server/repo/vocabulary';
++import { regenerateMeanings } from '@/server/services/enrich';
++import { ingestPdf } from '@/server/services/ingest';
++import { regenerateUsageMeaning } from '@/server/services/usage-meaning';
++
++// M6-2 격리: 사용자 B는 A의 문서·후보·카드·용례·복습 기록을 어떤 입구로도 읽거나 바꾸지 못한다.
++// 남의 id는 "없음"과 같게 다룬다.
++
++const now = new Date(2026, 9, 16, 10, 0, 0);
++const candidate = (lemma: string) => ({
++  lemma,
++  surface: lemma,
++  sentence: `The ${lemma} matters.`,
++  count: 1,
++  isExisting: false,
++  inDictionary: true,
++});
++
++let db: Db;
++let a: { docId: number; reviewingDocId: number; wordId: number; occurrenceId: number; logId: number };
++
++beforeEach(() => {
++  db = createDb(':memory:');
++  addUser(db, USER);
++  addUser(db, OTHER);
++  // A: 카드 하나(robust, 뜻 실패), 복습 기록 하나, 아는 단어 하나(paper), 검토 중인 문서 하나
++  const doc = createDocument(db, USER, { title: 'A paper', kind: 'paper' });
++  replaceCandidates(db, doc.id, [candidate('robust'), candidate('paper')]);
++  updateDocumentStatus(db, doc.id, 'reviewing');
++  const robust = listCandidates(db, USER, doc.id).find((c) => c.lemma === 'robust')!;
++  const saved = saveReviewSelection(db, USER, doc.id, [robust.id]);
++  markMeaningsFailed(db, saved.occurrenceIds);
++  const { logId } = recordAnswer(db, USER, saved.wordIds[0], 'again', now);
++  const reviewing = createDocument(db, USER, { title: 'A draft', kind: 'paper' });
++  replaceCandidates(db, reviewing.id, [candidate('heterogeneous')]);
++  updateDocumentStatus(db, reviewing.id, 'reviewing');
++  a = { docId: doc.id, reviewingDocId: reviewing.id, wordId: saved.wordIds[0], occurrenceId: saved.occurrenceIds[0], logId };
++});
++
++describe('another user cannot see A', () => {
++  it('documents, candidates and counts are empty for B', () => {
++    expect(listDocuments(db, OTHER)).toEqual([]);
++    expect(getDocument(db, OTHER, a.docId)).toBeUndefined();
++    expect(listCandidates(db, OTHER, a.reviewingDocId)).toEqual([]);
++    expect(countCandidatesByDocument(db, OTHER).size).toBe(0);
++    expect(countOccurrencesByDocument(db, OTHER).size).toBe(0);
++    expect(countFailedMeaningsByDocument(db, OTHER).size).toBe(0);
++    expect(listOccurrencesByDocument(db, OTHER, a.docId)).toEqual([]);
++    expect(countOccurrencesByWord(db, OTHER, [a.wordId]).size).toBe(0);
++    expect(getOccurrenceMeaning(db, OTHER, a.occurrenceId)).toBeUndefined();
++    expect(listFailedMeaningIds(db, OTHER, a.docId)).toEqual([]);
++    expect(listMeaningRequests(db, OTHER, [a.occurrenceId])).toEqual([]);
++    expect(listKnownLemmas(db, OTHER)).toEqual(new Set());
++    expect(listWordLemmas(db, OTHER)).toEqual(new Set());
++  });
++
++  it('study queue and counts are B’s own', () => {
++    expect(getStudyQueue(db, OTHER, now, 20)).toEqual([]);
++    expect(countStudyToday(db, OTHER, now, 20)).toEqual({ review: 0, fresh: 0 });
++    expect(getStudyQueue(db, USER, new Date(now.getTime() + 86_400_000), 20).map((c) => c.lemma)).toEqual(['robust']);
++  });
++});
++
++describe('another user cannot change A', () => {
++  it('cannot save A’s review, delete A’s card, or answer and undo on A’s card', () => {
++    const ids = listCandidates(db, USER, a.reviewingDocId).map((c) => c.id);
++    expect(() => saveReviewSelection(db, OTHER, a.reviewingDocId, ids)).toThrow(ReviewError);
++    expect(getDocument(db, USER, a.reviewingDocId)?.status).toBe('reviewing');
++
++    expect(deleteCard(db, OTHER, a.wordId)).toBe(false);
++    expect(() => recordAnswer(db, OTHER, a.wordId, 'good', now)).toThrow(StudyError);
++    expect(() => undoAnswer(db, OTHER, a.logId)).toThrow(StudyError);
++    expect(db.select().from(words).all()).toHaveLength(1);
++    expect(db.select().from(reviewLogs).all()).toHaveLength(1);
++  });
++
++  it('cannot regenerate A’s meanings through either entry point', async () => {
++    let called = 0;
++    const model: MeaningModel = async (batch) => {
++      called += batch.length;
++      return batch.map((r) => ({ id: r.id, meaningKo: '뜻' }));
++    };
++    expect(occurrencesBelongTo(db, OTHER, a.docId, [])).toBe(false);
++    expect(occurrencesBelongTo(db, OTHER, a.docId, [a.occurrenceId])).toBe(false);
++    expect(await regenerateMeanings(db, OTHER, [a.occurrenceId], model)).toEqual({ error: null, done: 0, failed: 0 });
++    expect(await regenerateUsageMeaning(db, OTHER, a.occurrenceId, model)).toEqual({ error: '용례를 찾을 수 없습니다.' });
++    expect(called).toBe(0);
++    expect(getOccurrenceMeaning(db, USER, a.occurrenceId)?.meaningStatus).toBe('failed');
++  });
++
++  it('keeps settings apart', () => {
++    saveSettings(db, OTHER, { excludeTopN: 5000, dailyNewLimit: 5, autoSpeak: true });
++    expect(getSettings(db, USER).dailyNewLimit).toBe(20);
++    expect(getSettings(db, OTHER)).toEqual({ excludeTopN: 5000, dailyNewLimit: 5, autoSpeak: true });
++  });
++});
++
++describe('the same word for two users', () => {
++  it('gives each user their own card and their own known words', async () => {
++    const doc = createDocument(db, OTHER, { title: 'B paper', kind: 'paper' });
++    replaceCandidates(db, doc.id, [candidate('robust'), candidate('paper')]);
++    updateDocumentStatus(db, doc.id, 'reviewing');
++    const ids = listCandidates(db, OTHER, doc.id).map((c) => c.id);
++    saveReviewSelection(db, OTHER, doc.id, ids); // B는 둘 다 카드로(A는 paper를 아는 단어로 했다)
++
++    const cards = db.select({ userId: words.userId, lemma: words.lemma }).from(words).all();
++    expect(cards).toEqual(
++      expect.arrayContaining([
++        { userId: USER, lemma: 'robust' },
++        { userId: OTHER, lemma: 'robust' },
++        { userId: OTHER, lemma: 'paper' },
++      ]),
++    );
++    expect(listKnownLemmas(db, USER)).toEqual(new Set(['paper']));
++    expect(listKnownLemmas(db, OTHER)).toEqual(new Set());
++  });
++
++  it('extracts candidates for B without A’s known words or cards', async () => {
++    const pdf = makePdf([
++      [
++        'This paper examines heterogeneous datasets with rigor.',
++        'The proposed estimator remains robust under perturbations.',
++        'We evaluate heterogeneous perturbations on several benchmarks.',
++        'Results confirm that the estimator generalizes across domains.',
++      ],
++    ]);
++    const result = await ingestPdf(db, OTHER, { fileName: 'b.pdf', title: '', kind: 'paper', bytes: pdf });
++    const lemmas = listCandidates(db, OTHER, result.documentId);
++    expect(lemmas.find((c) => c.lemma === 'robust')?.isExisting).toBe(false); // A의 카드는 B에게 "이미 있음"이 아니다
++    expect(getDocument(db, USER, result.documentId)).toBeUndefined();
++  });
++});
+diff --git a/tests/server/per-user-migration.test.ts b/tests/server/per-user-migration.test.ts
+new file mode 100644
+index 0000000..d9b77f2
+--- /dev/null
++++ b/tests/server/per-user-migration.test.ts
+@@ -0,0 +1,110 @@
++import fs from 'node:fs';
++import os from 'node:os';
++import path from 'node:path';
++import Database from 'better-sqlite3';
++import { drizzle } from 'drizzle-orm/better-sqlite3';
++import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
++import { afterEach, beforeEach, describe, expect, it } from 'vitest';
++import { addUser } from '../helpers/users';
++import { createDb, type Db } from '@/server/db/client';
++import { documents, knownWords, occurrences, reviewLogs, settings, users, words } from '@/server/db/schema';
++import { ClaimError, claimLegacyData, LEGACY_OWNER } from '@/server/repo/claim';
++
++// 0006_per_user가 기존 데이터를 하나도 잃지 않고 임시 소유자에게 묶는지, db:claim이 내 계정으로 옮기는지 본다.
++// 0005까지만 적용한 DB에 옛 모양의 행을 넣고, createDb로 나머지 마이그레이션을 돌린다.
++
++let dir: string;
++let file: string;
++const opened: Db[] = [];
++// 열어 둔 DB는 닫아야 Windows에서 임시 폴더를 지울 수 있다.
++const open = (f: string) => {
++  const db = createDb(f);
++  opened.push(db);
++  return db;
++};
++
++function migrateUpTo0005(target: string) {
++  const folder = path.join(dir, 'drizzle');
++  fs.cpSync(path.join(process.cwd(), 'drizzle'), folder, { recursive: true });
++  const journalPath = path.join(folder, 'meta', '_journal.json');
++  const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8')) as { entries: { tag: string }[] };
++  journal.entries = journal.entries.filter((e) => e.tag !== '0006_per_user');
++  fs.writeFileSync(journalPath, JSON.stringify(journal));
++  const sqlite = new Database(target);
++  migrate(drizzle({ client: sqlite }), { migrationsFolder: folder });
++  return sqlite;
++}
++
++beforeEach(() => {
++  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slave-voca-mig-'));
++  file = path.join(dir, 'app.db');
++});
++
++afterEach(() => {
++  for (const db of opened.splice(0)) (db as unknown as { $client: Database.Database }).$client.close();
++  fs.rmSync(dir, { recursive: true, force: true });
++});
++
++function seedOldData() {
++  const sqlite = migrateUpTo0005(file);
++  sqlite.pragma('foreign_keys = ON');
++  sqlite.exec(`
++    INSERT INTO documents (id, title, kind, status, created_at) VALUES (1, 'Paper', 'paper', 'done', 1);
++    INSERT INTO words (id, lemma, created_at, state, reps) VALUES (1, 'robust', 1, 2, 3), (2, 'paradigm', 1, 0, 0);
++    INSERT INTO occurrences (id, word_id, document_id, surface, sentence, meaning_ko, meaning_status, created_at)
++      VALUES (1, 1, 1, 'robust', 'A robust model.', '강건한', 'done', 1), (2, 2, 1, 'paradigm', 'A paradigm.', NULL, 'failed', 1);
++    INSERT INTO review_logs (word_id, rating, reviewed_at) VALUES (1, 3, 1);
++    INSERT INTO known_words (lemma, created_at) VALUES ('paper', 1);
++    INSERT INTO settings (key, value) VALUES ('daily_new_limit', '7');
++  `);
++  sqlite.close();
++}
++
++describe('0006_per_user migration', () => {
++  it('keeps every row and gives them to the legacy owner', () => {
++    seedOldData();
++    const db = open(file);
++    expect(db.select().from(occurrences).all()).toHaveLength(2);
++    expect(db.select().from(reviewLogs).all()).toHaveLength(1);
++    expect(db.select({ u: words.userId, l: words.lemma, reps: words.reps }).from(words).all()).toEqual([
++      { u: LEGACY_OWNER, l: 'robust', reps: 3 },
++      { u: LEGACY_OWNER, l: 'paradigm', reps: 0 },
++    ]);
++    expect(db.select({ u: documents.userId }).from(documents).all()).toEqual([{ u: LEGACY_OWNER }]);
++    expect(db.select({ u: knownWords.userId }).from(knownWords).all()).toEqual([{ u: LEGACY_OWNER }]);
++    expect(db.select({ u: settings.userId, v: settings.value }).from(settings).all()).toEqual([{ u: LEGACY_OWNER, v: '7' }]);
++    expect(db.select({ id: users.id, status: users.status }).from(users).all()).toEqual([
++      { id: LEGACY_OWNER, status: 'blocked' },
++    ]);
++  });
++
++  it('does not create the legacy owner for an empty database', () => {
++    const db = open(file);
++    expect(db.select().from(users).all()).toEqual([]);
++  });
++});
++
++describe('claimLegacyData', () => {
++  let db: Db;
++  beforeEach(() => {
++    seedOldData();
++    db = open(file);
++    db.insert(users).values({ id: 'me', name: 'Me', email: 'me@example.com', status: 'approved', role: 'admin' }).run();
++  });
++
++  it('moves everything to the account and removes the legacy owner', () => {
++    expect(claimLegacyData(db, ' Me@Example.com ')).toEqual({ documents: 1, words: 2, knownWords: 1, settings: 1 });
++    expect(new Set(db.select({ u: words.userId }).from(words).all().map((r) => r.u))).toEqual(new Set(['me']));
++    expect(db.select({ id: users.id }).from(users).all()).toEqual([{ id: 'me' }]);
++    expect(db.select().from(occurrences).all()).toHaveLength(2);
++    expect(() => claimLegacyData(db, 'me@example.com')).toThrow('넘길 이전 데이터가 없습니다.');
++  });
++
++  it('refuses an unknown email or an account that already has data, changing nothing', () => {
++    expect(() => claimLegacyData(db, 'nobody@example.com')).toThrow(ClaimError);
++    addUser(db, 'busy');
++    db.insert(knownWords).values({ userId: 'busy', lemma: 'x' }).run();
++    expect(() => claimLegacyData(db, 'busy@example.com')).toThrow('이미 데이터가 있어');
++    expect(db.select({ u: words.userId }).from(words).all().every((r) => r.u === LEGACY_OWNER)).toBe(true);
++  });
++});
+diff --git a/tests/server/regenerate-meanings.test.ts b/tests/server/regenerate-meanings.test.ts
+index af0d42a..1e309ad 100644
+--- a/tests/server/regenerate-meanings.test.ts
++++ b/tests/server/regenerate-meanings.test.ts
+@@ -1,4 +1,5 @@
+ import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, USER } from '../helpers/users';
+ import { createDb, type Db } from '@/server/db/client';
+ import {
+   listOccurrencesByDocument,
+@@ -14,10 +15,11 @@ import type { MeaningModel } from '@/lib/meaning/generate';
+ let db: Db;
+ beforeEach(() => {
+   db = createDb(':memory:');
++  addUser(db);
+ });
+ 
+ function failedDocument(lemmas: string[]) {
+-  const doc = createDocument(db, { title: 'Paper', kind: 'paper' });
++  const doc = createDocument(db, USER, { title: 'Paper', kind: 'paper' });
+   replaceCandidates(
+     db,
+     doc.id,
+@@ -31,7 +33,7 @@ function failedDocument(lemmas: string[]) {
+     })),
+   );
+   updateDocumentStatus(db, doc.id, 'reviewing');
+-  const saved = saveReviewSelection(db, doc.id, listCandidates(db, doc.id).map((c) => c.id));
++  const saved = saveReviewSelection(db, USER, doc.id, listCandidates(db, USER, doc.id).map((c) => c.id));
+   markMeaningsFailed(db, saved.occurrenceIds);
+   return { doc, saved };
+ }
+@@ -41,8 +43,8 @@ describe('regenerateMeanings', () => {
+     const { doc, saved } = failedDocument(['progression']);
+     setMeanings(db, [{ id: saved.occurrenceIds[0], meaningKo: '진행' }]);
+     const model: MeaningModel = async (batch) => batch.map((r) => ({ id: r.id, meaningKo: '수열' }));
+-    expect(await regenerateMeanings(db, saved.occurrenceIds, model)).toEqual({ error: null, done: 1, failed: 0 });
+-    expect(listOccurrencesByDocument(db, doc.id)[0]).toMatchObject({ meaningKo: '수열', meaningStatus: 'done' });
++    expect(await regenerateMeanings(db, USER, saved.occurrenceIds, model)).toEqual({ error: null, done: 1, failed: 0 });
++    expect(listOccurrencesByDocument(db, USER, doc.id)[0]).toMatchObject({ meaningKo: '수열', meaningStatus: 'done' });
+   });
+ 
+   it('does not turn a meaning that another request stored meanwhile into failed', async () => {
+@@ -53,16 +55,16 @@ describe('regenerateMeanings', () => {
+       setMeanings(db, [{ id, meaningKo: '수열' }]); // 다른 요청이 그 사이 성공
+       throw new Error('503');
+     };
+-    await regenerateMeanings(db, saved.occurrenceIds, slowFailing); // Error('503')에는 상태가 없어 재시도하지 않는다
+-    expect(listOccurrencesByDocument(db, doc.id)[0]).toMatchObject({ meaningKo: '수열', meaningStatus: 'done' });
++    await regenerateMeanings(db, USER, saved.occurrenceIds, slowFailing); // Error('503')에는 상태가 없어 재시도하지 않는다
++    expect(listOccurrencesByDocument(db, USER, doc.id)[0]).toMatchObject({ meaningKo: '수열', meaningStatus: 'done' });
+   });
+ 
+   it('keeps an existing meaning when regenerating it fails', async () => {
+     const { doc, saved } = failedDocument(['progression']);
+     setMeanings(db, [{ id: saved.occurrenceIds[0], meaningKo: '진행' }]);
+     const model: MeaningModel = async () => [];
+-    expect(await regenerateMeanings(db, saved.occurrenceIds, model)).toEqual({ error: null, done: 0, failed: 1 });
+-    expect(listOccurrencesByDocument(db, doc.id)[0]).toMatchObject({ meaningKo: '진행', meaningStatus: 'done' });
++    expect(await regenerateMeanings(db, USER, saved.occurrenceIds, model)).toEqual({ error: null, done: 0, failed: 1 });
++    expect(listOccurrencesByDocument(db, USER, doc.id)[0]).toMatchObject({ meaningKo: '진행', meaningStatus: 'done' });
+   });
+ 
+   it('fills the meanings it can and leaves the rest failed', async () => {
+@@ -70,8 +72,8 @@ describe('regenerateMeanings', () => {
+     const model: MeaningModel = async (batch) =>
+       batch.filter((r) => r.word === 'robust').map((r) => ({ id: r.id, meaningKo: '강건한' }));
+ 
+-    expect(await regenerateMeanings(db, saved.occurrenceIds, model)).toEqual({ error: null, done: 1, failed: 1 });
+-    expect(listOccurrencesByDocument(db, doc.id)).toMatchObject([
++    expect(await regenerateMeanings(db, USER, saved.occurrenceIds, model)).toEqual({ error: null, done: 1, failed: 1 });
++    expect(listOccurrencesByDocument(db, USER, doc.id)).toMatchObject([
+       { lemma: 'paradigm', meaningStatus: 'failed' },
+       { lemma: 'robust', meaningStatus: 'done', meaningKo: '강건한' },
+     ]);
+@@ -79,14 +81,14 @@ describe('regenerateMeanings', () => {
+ 
+   it('changes nothing without an API key', async () => {
+     const { doc, saved } = failedDocument(['robust']);
+-    expect(await regenerateMeanings(db, saved.occurrenceIds, null)).toEqual({ error: 'missing-key' });
+-    expect(listOccurrencesByDocument(db, doc.id)[0].meaningStatus).toBe('failed');
++    expect(await regenerateMeanings(db, USER, saved.occurrenceIds, null)).toEqual({ error: 'missing-key' });
++    expect(listOccurrencesByDocument(db, USER, doc.id)[0].meaningStatus).toBe('failed');
+   });
+ 
+   it('does nothing for an empty list', async () => {
+     const model: MeaningModel = async () => {
+       throw new Error('should not be called');
+     };
+-    expect(await regenerateMeanings(db, [], model)).toEqual({ error: null, done: 0, failed: 0 });
++    expect(await regenerateMeanings(db, USER, [], model)).toEqual({ error: null, done: 0, failed: 0 });
+   });
+ });
+diff --git a/tests/server/repo.test.ts b/tests/server/repo.test.ts
+index 5efe7ad..19b4735 100644
+--- a/tests/server/repo.test.ts
++++ b/tests/server/repo.test.ts
+@@ -1,4 +1,5 @@
+ import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, USER } from '../helpers/users';
+ import { createDb, type Db } from '@/server/db/client';
+ import { knownWords, settings, words } from '@/server/db/schema';
+ import {
+@@ -27,54 +28,55 @@ const candidate = (lemma: string, count: number) => ({
+ let db: Db;
+ beforeEach(() => {
+   db = createDb(':memory:');
++  addUser(db);
+ });
+ 
+ describe('documents repo', () => {
+   it('creates a document in the extracting state and updates its status', () => {
+-    const doc = createDocument(db, { title: 'Paper', kind: 'paper' });
++    const doc = createDocument(db, USER, { title: 'Paper', kind: 'paper' });
+     expect(doc.status).toBe('extracting');
+     updateDocumentStatus(db, doc.id, 'error', 'broken');
+-    expect(getDocument(db, doc.id)).toMatchObject({ status: 'error', errorMessage: 'broken' });
++    expect(getDocument(db, USER, doc.id)).toMatchObject({ status: 'error', errorMessage: 'broken' });
+   });
+ 
+   it('lists the newest document first', () => {
+-    const first = createDocument(db, { title: 'A', kind: 'paper' });
+-    const second = createDocument(db, { title: 'B', kind: 'presentation' });
+-    expect(listDocuments(db).map((d) => d.id)).toEqual([second.id, first.id]);
++    const first = createDocument(db, USER, { title: 'A', kind: 'paper' });
++    const second = createDocument(db, USER, { title: 'B', kind: 'presentation' });
++    expect(listDocuments(db, USER).map((d) => d.id)).toEqual([second.id, first.id]);
+   });
+ });
+ 
+ describe('candidates repo', () => {
+   it('replaces candidates and lists them by count, then lemma', () => {
+-    const doc = createDocument(db, { title: 'A', kind: 'paper' });
++    const doc = createDocument(db, USER, { title: 'A', kind: 'paper' });
+     replaceCandidates(db, doc.id, [candidate('old', 1)]);
+     replaceCandidates(db, doc.id, [
+       candidate('beta', 1),
+       candidate('alpha', 1),
+       candidate('zeta', 3),
+     ]);
+-    expect(listCandidates(db, doc.id).map((c) => c.lemma)).toEqual(['zeta', 'alpha', 'beta']);
++    expect(listCandidates(db, USER, doc.id).map((c) => c.lemma)).toEqual(['zeta', 'alpha', 'beta']);
+   });
+ 
+   it('stores more candidates than one INSERT can bind', () => {
+     // 한 행에 변수 6개라 SQLite 상한(32766)으로는 5461행까지만 한 번에 넣을 수 있다.
+-    const doc = createDocument(db, { title: 'Thesis', kind: 'paper' });
++    const doc = createDocument(db, USER, { title: 'Thesis', kind: 'paper' });
+     const many = Array.from({ length: 6000 }, (_, i) =>
+       candidate(`word${String(i).padStart(4, '0')}`, i % 3),
+     );
+     replaceCandidates(db, doc.id, many);
+-    const stored = listCandidates(db, doc.id);
++    const stored = listCandidates(db, USER, doc.id);
+     expect(stored).toHaveLength(6000);
+     expect(stored[0]).toMatchObject({ lemma: 'word0002', count: 2 });
+     expect(stored.at(-1)).toMatchObject({ lemma: 'word5997', count: 0 });
+   });
+ 
+   it('counts candidates per document', () => {
+-    const a = createDocument(db, { title: 'A', kind: 'paper' });
+-    const b = createDocument(db, { title: 'B', kind: 'paper' });
++    const a = createDocument(db, USER, { title: 'A', kind: 'paper' });
++    const b = createDocument(db, USER, { title: 'B', kind: 'paper' });
+     replaceCandidates(db, a.id, [candidate('xenon', 1), candidate('xylem', 1)]);
+     replaceCandidates(db, b.id, []);
+-    const counts = countCandidatesByDocument(db);
++    const counts = countCandidatesByDocument(db, USER);
+     expect(counts.get(a.id)).toBe(2);
+     expect(counts.get(b.id)).toBeUndefined();
+   });
+@@ -82,48 +84,48 @@ describe('candidates repo', () => {
+ 
+ describe('settings repo', () => {
+   it('returns defaults when nothing is stored', () => {
+-    expect(getSettings(db)).toEqual(DEFAULT_SETTINGS);
++    expect(getSettings(db, USER)).toEqual(DEFAULT_SETTINGS);
+   });
+ 
+   it('reads an empty stored number as the default, not as 0', () => {
+-    db.insert(settings).values({ key: 'daily_new_limit', value: '' }).run();
+-    expect(getSettings(db).dailyNewLimit).toBe(20);
++    db.insert(settings).values({ userId: USER, key: 'daily_new_limit', value: '' }).run();
++    expect(getSettings(db, USER).dailyNewLimit).toBe(20);
+   });
+ 
+   it('reads stored values and ignores invalid ones', () => {
+     db.insert(settings)
+       .values([
+-        { key: 'exclude_top_n', value: '3000' },
+-        { key: 'daily_new_limit', value: 'abc' },
++        { userId: USER, key: 'exclude_top_n', value: '3000' },
++        { userId: USER, key: 'daily_new_limit', value: 'abc' },
+       ])
+       .run();
+-    expect(getSettings(db)).toEqual({ excludeTopN: 3000, dailyNewLimit: 20, autoSpeak: false });
++    expect(getSettings(db, USER)).toEqual({ excludeTopN: 3000, dailyNewLimit: 20, autoSpeak: false });
+   });
+ 
+   it('accepts a daily new limit of 0 and falls back for values out of range', () => {
+     db.insert(settings)
+       .values([
+-        { key: 'exclude_top_n', value: '999' },
+-        { key: 'daily_new_limit', value: '0' },
+-        { key: 'auto_speak', value: 'yes' },
++        { userId: USER, key: 'exclude_top_n', value: '999' },
++        { userId: USER, key: 'daily_new_limit', value: '0' },
++        { userId: USER, key: 'auto_speak', value: 'yes' },
+       ])
+       .run();
+-    expect(getSettings(db)).toEqual({ excludeTopN: 3000, dailyNewLimit: 0, autoSpeak: false });
++    expect(getSettings(db, USER)).toEqual({ excludeTopN: 3000, dailyNewLimit: 0, autoSpeak: false });
+   });
+ 
+   it('saves all settings and overwrites earlier values', () => {
+-    saveSettings(db, { excludeTopN: 8000, dailyNewLimit: 0, autoSpeak: true });
+-    saveSettings(db, { excludeTopN: 9000, dailyNewLimit: 5, autoSpeak: true });
+-    expect(getSettings(db)).toEqual({ excludeTopN: 9000, dailyNewLimit: 5, autoSpeak: true });
++    saveSettings(db, USER, { excludeTopN: 8000, dailyNewLimit: 0, autoSpeak: true });
++    saveSettings(db, USER, { excludeTopN: 9000, dailyNewLimit: 5, autoSpeak: true });
++    expect(getSettings(db, USER)).toEqual({ excludeTopN: 9000, dailyNewLimit: 5, autoSpeak: true });
+     expect(db.select().from(settings).all()).toHaveLength(3);
+   });
+ });
+ 
+ describe('vocabulary repo', () => {
+   it('lists known lemmas and existing card lemmas', () => {
+-    db.insert(knownWords).values({ lemma: 'robust' }).run();
+-    db.insert(words).values({ lemma: 'paradigm' }).run();
+-    expect(listKnownLemmas(db)).toEqual(new Set(['robust']));
+-    expect(listWordLemmas(db)).toEqual(new Set(['paradigm']));
++    db.insert(knownWords).values({ userId: USER, lemma: 'robust' }).run();
++    db.insert(words).values({ userId: USER, lemma: 'paradigm' }).run();
++    expect(listKnownLemmas(db, USER)).toEqual(new Set(['robust']));
++    expect(listWordLemmas(db, USER)).toEqual(new Set(['paradigm']));
+   });
+ });
+diff --git a/tests/server/study.test.ts b/tests/server/study.test.ts
+index 18ee2c8..fce46d7 100644
+--- a/tests/server/study.test.ts
++++ b/tests/server/study.test.ts
+@@ -1,4 +1,5 @@
+ import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, USER } from '../helpers/users';
+ import { createDb, type Db } from '@/server/db/client';
+ import { reviewLogs, words } from '@/server/db/schema';
+ import { saveReviewSelection, setMeanings, listMeaningRequests } from '@/server/repo/cards';
+@@ -12,11 +13,12 @@ const HOUR = 3_600_000;
+ let db: Db;
+ beforeEach(() => {
+   db = createDb(':memory:');
++  addUser(db);
+ });
+ 
+ // 문서 하나를 저장해 카드를 만든다. 카드는 lemmas 순서대로 만들어진다.
+ function saveCards(title: string, lemmas: string[]) {
+-  const doc = createDocument(db, { title, kind: 'paper' });
++  const doc = createDocument(db, USER, { title, kind: 'paper' });
+   replaceCandidates(
+     db,
+     doc.id,
+@@ -30,7 +32,7 @@ function saveCards(title: string, lemmas: string[]) {
+     })),
+   );
+   updateDocumentStatus(db, doc.id, 'reviewing');
+-  return saveReviewSelection(db, doc.id, listCandidates(db, doc.id).map((c) => c.id));
++  return saveReviewSelection(db, USER, doc.id, listCandidates(db, USER, doc.id).map((c) => c.id));
+ }
+ 
+ const wordId = (lemma: string) => db.select().from(words).all().find((w) => w.lemma === lemma)!.id;
+@@ -38,7 +40,7 @@ const wordId = (lemma: string) => db.select().from(words).all().find((w) => w.le
+ describe('getStudyQueue', () => {
+   it('serves new cards in creation order up to the daily limit', () => {
+     saveCards('A', ['alpha', 'beta', 'gamma']);
+-    const queue = getStudyQueue(db, now, 2);
++    const queue = getStudyQueue(db, USER, now, 2);
+     expect(queue.map((c) => c.lemma)).toEqual(['alpha', 'beta']);
+     expect(queue.every((c) => c.isNew)).toBe(true);
+     expect(queue[0].intervals.again).toBeLessThanOrEqual(queue[0].intervals.good);
+@@ -47,42 +49,42 @@ describe('getStudyQueue', () => {
+ 
+   it('counts new cards already introduced today against the limit', () => {
+     saveCards('A', ['alpha', 'beta', 'gamma']);
+-    recordAnswer(db, wordId('alpha'), 'good', now);
++    recordAnswer(db, USER, wordId('alpha'), 'good', now);
+     const later = new Date(now.getTime() + HOUR);
+-    expect(getStudyQueue(db, later, 2).filter((c) => c.isNew).map((c) => c.lemma)).toEqual(['beta']);
++    expect(getStudyQueue(db, USER, later, 2).filter((c) => c.isNew).map((c) => c.lemma)).toEqual(['beta']);
+   });
+ 
+   it('resets the new card allowance the next day', () => {
+     saveCards('A', ['alpha', 'beta', 'gamma']);
+-    recordAnswer(db, wordId('alpha'), 'good', now);
+-    recordAnswer(db, wordId('beta'), 'good', now);
++    recordAnswer(db, USER, wordId('alpha'), 'good', now);
++    recordAnswer(db, USER, wordId('beta'), 'good', now);
+     const tomorrow = new Date(2026, 9, 14, 9, 0, 0);
+-    expect(getStudyQueue(db, tomorrow, 2).filter((c) => c.isNew).map((c) => c.lemma)).toEqual([
++    expect(getStudyQueue(db, USER, tomorrow, 2).filter((c) => c.isNew).map((c) => c.lemma)).toEqual([
+       'gamma',
+     ]);
+   });
+ 
+   it('puts due reviews first, oldest due first, and skips cards not yet due', () => {
+     saveCards('A', ['alpha', 'beta', 'gamma']);
+-    recordAnswer(db, wordId('alpha'), 'again', now); // 몇 분 뒤 다시
+-    recordAnswer(db, wordId('beta'), 'again', new Date(now.getTime() - HOUR));
+-    const queue = getStudyQueue(db, new Date(now.getTime() + HOUR), 20);
++    recordAnswer(db, USER, wordId('alpha'), 'again', now); // 몇 분 뒤 다시
++    recordAnswer(db, USER, wordId('beta'), 'again', new Date(now.getTime() - HOUR));
++    const queue = getStudyQueue(db, USER, new Date(now.getTime() + HOUR), 20);
+     expect(queue.map((c) => [c.lemma, c.isNew])).toEqual([
+       ['beta', false],
+       ['alpha', false],
+       ['gamma', true],
+     ]);
+-    expect(getStudyQueue(db, now, 0).map((c) => c.lemma)).toEqual(['beta']);
++    expect(getStudyQueue(db, USER, now, 0).map((c) => c.lemma)).toEqual(['beta']);
+   });
+ 
+   it('attaches up to two latest usages with meanings and document titles', () => {
+     saveCards('First', ['robust']);
+     saveCards('Second', ['robust']);
+     saveCards('Third', ['robust']);
+-    const requests = listMeaningRequests(db, [3]);
++    const requests = listMeaningRequests(db, USER, [3]);
+     setMeanings(db, [{ id: requests[0].id, meaningKo: '견고한' }]);
+ 
+-    const [card] = getStudyQueue(db, now, 20);
++    const [card] = getStudyQueue(db, USER, now, 20);
+     expect(card.usages).toHaveLength(2);
+     expect(card.usages[0]).toMatchObject({
+       documentTitle: 'Third',
+@@ -97,10 +99,10 @@ describe('getStudyQueue', () => {
+ describe('countStudyToday', () => {
+   it('counts due reviews and the new cards still available today', () => {
+     saveCards('A', ['alpha', 'beta', 'gamma']);
+-    recordAnswer(db, wordId('alpha'), 'again', now);
++    recordAnswer(db, USER, wordId('alpha'), 'again', now);
+     const later = new Date(now.getTime() + HOUR);
+-    expect(countStudyToday(db, later, 20)).toEqual({ review: 1, fresh: 2 });
+-    expect(countStudyToday(db, later, 1)).toEqual({ review: 1, fresh: 0 });
++    expect(countStudyToday(db, USER, later, 20)).toEqual({ review: 1, fresh: 2 });
++    expect(countStudyToday(db, USER, later, 1)).toEqual({ review: 1, fresh: 0 });
+   });
+ });
+ 
+@@ -108,10 +110,10 @@ describe('recordAnswer', () => {
+   it('updates the schedule, stamps introduction once and logs the review', () => {
+     saveCards('A', ['alpha']);
+     const id = wordId('alpha');
+-    const first = recordAnswer(db, id, 'good', now);
++    const first = recordAnswer(db, USER, id, 'good', now);
+     expect(first.intervals.good).toBeGreaterThan(0);
+     const later = new Date(now.getTime() + 2 * HOUR);
+-    recordAnswer(db, id, 'hard', later);
++    recordAnswer(db, USER, id, 'hard', later);
+ 
+     const word = db.select().from(words).all()[0];
+     expect(first.due.getTime()).toBeGreaterThan(now.getTime());
+@@ -121,6 +123,6 @@ describe('recordAnswer', () => {
+   });
+ 
+   it('rejects unknown cards', () => {
+-    expect(() => recordAnswer(db, 999, 'good', now)).toThrow(StudyError);
++    expect(() => recordAnswer(db, USER, 999, 'good', now)).toThrow(StudyError);
+   });
+ });
+diff --git a/tests/server/undo-answer.test.ts b/tests/server/undo-answer.test.ts
+index 2ecf1a8..5bccbfb 100644
+--- a/tests/server/undo-answer.test.ts
++++ b/tests/server/undo-answer.test.ts
+@@ -1,4 +1,5 @@
+ import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, USER } from '../helpers/users';
+ import { createDb, type Db } from '@/server/db/client';
+ import { reviewLogs, words } from '@/server/db/schema';
+ import { saveReviewSelection } from '@/server/repo/cards';
+@@ -12,10 +13,11 @@ const MIN = 60_000;
+ let db: Db;
+ beforeEach(() => {
+   db = createDb(':memory:');
++  addUser(db);
+ });
+ 
+ function saveCards(lemmas: string[]) {
+-  const doc = createDocument(db, { title: 'A', kind: 'paper' });
++  const doc = createDocument(db, USER, { title: 'A', kind: 'paper' });
+   replaceCandidates(
+     db,
+     doc.id,
+@@ -29,7 +31,7 @@ function saveCards(lemmas: string[]) {
+     })),
+   );
+   updateDocumentStatus(db, doc.id, 'reviewing');
+-  saveReviewSelection(db, doc.id, listCandidates(db, doc.id).map((c) => c.id));
++  saveReviewSelection(db, USER, doc.id, listCandidates(db, USER, doc.id).map((c) => c.id));
+ }
+ 
+ const card = (lemma: string) => db.select().from(words).all().find((w) => w.lemma === lemma)!;
+@@ -38,23 +40,23 @@ describe('undoAnswer', () => {
+   it('restores a new card and gives the daily new slot back', () => {
+     saveCards(['alpha', 'beta']);
+     const before = card('alpha');
+-    const { logId } = recordAnswer(db, before.id, 'good', now);
+-    expect(countStudyToday(db, now, 1).fresh).toBe(0);
++    const { logId } = recordAnswer(db, USER, before.id, 'good', now);
++    expect(countStudyToday(db, USER, now, 1).fresh).toBe(0);
+ 
+-    expect(undoAnswer(db, logId)).toEqual({ wordId: before.id });
++    expect(undoAnswer(db, USER, logId)).toEqual({ wordId: before.id });
+     expect(card('alpha')).toEqual(before);
+     expect(db.select().from(reviewLogs).all()).toEqual([]);
+-    expect(countStudyToday(db, now, 1).fresh).toBe(1);
++    expect(countStudyToday(db, USER, now, 1).fresh).toBe(1);
+   });
+ 
+   it('restores a reviewed card to its state before the last answer only', () => {
+     saveCards(['alpha']);
+     const id = card('alpha').id;
+-    recordAnswer(db, id, 'good', now);
++    recordAnswer(db, USER, id, 'good', now);
+     const afterFirst = card('alpha');
+-    const { logId } = recordAnswer(db, id, 'again', new Date(now.getTime() + 10 * MIN));
++    const { logId } = recordAnswer(db, USER, id, 'again', new Date(now.getTime() + 10 * MIN));
+ 
+-    undoAnswer(db, logId);
++    undoAnswer(db, USER, logId);
+     expect(card('alpha')).toEqual(afterFirst);
+     expect(db.select().from(reviewLogs).all()).toHaveLength(1);
+   });
+@@ -62,23 +64,23 @@ describe('undoAnswer', () => {
+   it('refuses when the card was answered again afterwards', () => {
+     saveCards(['alpha']);
+     const id = card('alpha').id;
+-    const first = recordAnswer(db, id, 'again', now);
+-    recordAnswer(db, id, 'good', new Date(now.getTime() + MIN));
+-    expect(() => undoAnswer(db, first.logId)).toThrow(StudyError);
++    const first = recordAnswer(db, USER, id, 'again', now);
++    recordAnswer(db, USER, id, 'good', new Date(now.getTime() + MIN));
++    expect(() => undoAnswer(db, USER, first.logId)).toThrow(StudyError);
+     expect(db.select().from(reviewLogs).all()).toHaveLength(2);
+   });
+ 
+   it('refuses a missing log, a second undo, and a log without a snapshot', () => {
+     saveCards(['alpha']);
+-    const { logId } = recordAnswer(db, card('alpha').id, 'good', now);
+-    undoAnswer(db, logId);
+-    expect(() => undoAnswer(db, logId)).toThrow(StudyError);
++    const { logId } = recordAnswer(db, USER, card('alpha').id, 'good', now);
++    undoAnswer(db, USER, logId);
++    expect(() => undoAnswer(db, USER, logId)).toThrow(StudyError);
+ 
+     const old = db
+       .insert(reviewLogs)
+       .values({ wordId: card('alpha').id, rating: 3, reviewedAt: now })
+       .returning({ id: reviewLogs.id })
+       .get();
+-    expect(() => undoAnswer(db, old.id)).toThrow('되돌릴 수 없습니다');
++    expect(() => undoAnswer(db, USER, old.id)).toThrow('되돌릴 수 없습니다');
+   });
+ });
+diff --git a/tests/server/usage-meaning.test.ts b/tests/server/usage-meaning.test.ts
+index e75eaf5..a5ade97 100644
+--- a/tests/server/usage-meaning.test.ts
++++ b/tests/server/usage-meaning.test.ts
+@@ -1,4 +1,5 @@
+ import { beforeEach, describe, expect, it } from 'vitest';
++import { addUser, USER } from '../helpers/users';
+ import { createDb, type Db } from '@/server/db/client';
+ import { markMeaningsFailed, saveReviewSelection, setMeanings } from '@/server/repo/cards';
+ import { listCandidates, replaceCandidates } from '@/server/repo/candidates';
+@@ -10,15 +11,16 @@ import type { MeaningModel } from '@/lib/meaning/generate';
+ let db: Db;
+ beforeEach(() => {
+   db = createDb(':memory:');
++  addUser(db);
+ });
+ 
+ function oneUsage(): number {
+-  const doc = createDocument(db, { title: 'Paper', kind: 'paper' });
++  const doc = createDocument(db, USER, { title: 'Paper', kind: 'paper' });
+   replaceCandidates(db, doc.id, [
+     { lemma: 'progression', surface: 'progression', sentence: 'A geometric progression.', count: 1, isExisting: false, inDictionary: true },
+   ]);
+   updateDocumentStatus(db, doc.id, 'reviewing');
+-  const saved = saveReviewSelection(db, doc.id, listCandidates(db, doc.id).map((c) => c.id));
++  const saved = saveReviewSelection(db, USER, doc.id, listCandidates(db, USER, doc.id).map((c) => c.id));
+   markMeaningsFailed(db, saved.occurrenceIds);
+   return saved.occurrenceIds[0];
+ }
+@@ -27,14 +29,14 @@ const model = (meaningKo: string): MeaningModel => async (batch) => batch.map((r
+ 
+ describe('regenerateUsageMeaning', () => {
+   it('rejects ids that are not positive integers and ids that do not exist', async () => {
+-    expect(await regenerateUsageMeaning(db, '1', model('x'))).toEqual({ error: '잘못된 요청입니다.' });
+-    expect(await regenerateUsageMeaning(db, 0, model('x'))).toEqual({ error: '잘못된 요청입니다.' });
+-    expect(await regenerateUsageMeaning(db, 999, model('x'))).toEqual({ error: '용례를 찾을 수 없습니다.' });
++    expect(await regenerateUsageMeaning(db, USER, '1', model('x'))).toEqual({ error: '잘못된 요청입니다.' });
++    expect(await regenerateUsageMeaning(db, USER, 0, model('x'))).toEqual({ error: '잘못된 요청입니다.' });
++    expect(await regenerateUsageMeaning(db, USER, 999, model('x'))).toEqual({ error: '용례를 찾을 수 없습니다.' });
+   });
+ 
+   it('stores and returns the new meaning', async () => {
+     const id = oneUsage();
+-    expect(await regenerateUsageMeaning(db, id, model('수열'))).toEqual({
++    expect(await regenerateUsageMeaning(db, USER, id, model('수열'))).toEqual({
+       error: null,
+       meaningKo: '수열',
+       meaningStatus: 'done',
+@@ -48,7 +50,7 @@ describe('regenerateUsageMeaning', () => {
+     const broken: MeaningModel = async () => {
+       throw new Error('boom');
+     };
+-    expect(await regenerateUsageMeaning(db, id, broken)).toEqual({
++    expect(await regenerateUsageMeaning(db, USER, id, broken)).toEqual({
+       error: null,
+       meaningKo: '진행',
+       meaningStatus: 'done',
+@@ -58,6 +60,6 @@ describe('regenerateUsageMeaning', () => {
+ 
+   it('changes nothing without an API key', async () => {
+     const id = oneUsage();
+-    expect(await regenerateUsageMeaning(db, id, null)).toEqual({ error: MISSING_KEY_MESSAGE });
++    expect(await regenerateUsageMeaning(db, USER, id, null)).toEqual({ error: MISSING_KEY_MESSAGE });
+   });
+ });
