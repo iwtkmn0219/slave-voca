@@ -1,3 +1,5 @@
+import { mapWithConcurrency } from '@/lib/async/pool';
+
 export interface MeaningRequest {
   id: number;
   word: string;
@@ -12,8 +14,10 @@ export interface MeaningResult {
 // 단어 묶음 하나를 받아 문맥 뜻을 돌려주는 모델. 실제 구현은 gemini.ts, 테스트는 가짜를 쓴다.
 export type MeaningModel = (batch: MeaningRequest[]) => Promise<MeaningResult[]>;
 
-// 무료 등급 한도(모델별 분당 5요청) 때문에 크게 묶는다: 논문 한 편(후보 약 200개)이 요청 1~2개로 끝난다.
-export const MEANING_BATCH_SIZE = 200;
+// 2026-10-16 실측(M4-4): 200개 묶음보다 50개 묶음이 문맥 오답이 적었다. 묶음은 동시에 보내
+// 논문 한 편(후보 약 200개, 묶음 4~5개)이 한 번에 나간다. 큰 문서는 5개씩 나눠 보낸다.
+export const MEANING_BATCH_SIZE = 50;
+export const MEANING_CONCURRENCY = 5;
 
 export interface GenerateOutcome {
   done: MeaningResult[];
@@ -72,32 +76,48 @@ async function requestWithRetry(
   }
 }
 
-// MEANING_BATCH_SIZE개씩 나눠 요청한다. 응답에 빠졌거나 빈 뜻, 재시도해도 실패한 묶음은 failedIds로 돌려준다.
+// 묶음 하나를 요청하고 답을 done·failedIds로 나눈다. 응답에 빠졌거나 빈 뜻, 재시도해도 실패한 묶음은 failedIds다.
+async function requestBatch(
+  batch: MeaningRequest[],
+  batchNo: number,
+  model: MeaningModel,
+  retry: RetryOptions,
+): Promise<GenerateOutcome> {
+  const ids = new Set(batch.map((r) => r.id));
+  let results: MeaningResult[] = [];
+  try {
+    results = await requestWithRetry(batch, batchNo, model, retry);
+  } catch (err) {
+    console.error('문맥 뜻 생성 실패', err);
+  }
+  const answered = new Map<number, string>();
+  for (const r of results) {
+    const meaning = r.meaningKo.trim();
+    if (ids.has(r.id) && meaning.length > 0 && !answered.has(r.id)) answered.set(r.id, meaning);
+  }
+  const outcome: GenerateOutcome = { done: [], failedIds: [] };
+  for (const req of batch) {
+    const meaning = answered.get(req.id);
+    if (meaning === undefined) outcome.failedIds.push(req.id);
+    else outcome.done.push({ id: req.id, meaningKo: meaning });
+  }
+  return outcome;
+}
+
+// MEANING_BATCH_SIZE개씩 나눠 최대 MEANING_CONCURRENCY개 묶음을 동시에 요청한다.
+// 결과 순서는 끝난 순서가 아니라 묶음 순서다. 한 묶음이 실패해도 다른 묶음 결과는 그대로 돌려준다.
 export async function generateMeanings(
   requests: MeaningRequest[],
   model: MeaningModel,
   retry: RetryOptions = {},
 ): Promise<GenerateOutcome> {
-  const outcome: GenerateOutcome = { done: [], failedIds: [] };
-  for (let i = 0; i < requests.length; i += MEANING_BATCH_SIZE) {
-    const batch = requests.slice(i, i + MEANING_BATCH_SIZE);
-    const ids = new Set(batch.map((r) => r.id));
-    let results: MeaningResult[] = [];
-    try {
-      results = await requestWithRetry(batch, i / MEANING_BATCH_SIZE + 1, model, retry);
-    } catch (err) {
-      console.error('문맥 뜻 생성 실패', err);
-    }
-    const answered = new Map<number, string>();
-    for (const r of results) {
-      const meaning = r.meaningKo.trim();
-      if (ids.has(r.id) && meaning.length > 0 && !answered.has(r.id)) answered.set(r.id, meaning);
-    }
-    for (const req of batch) {
-      const meaning = answered.get(req.id);
-      if (meaning === undefined) outcome.failedIds.push(req.id);
-      else outcome.done.push({ id: req.id, meaningKo: meaning });
-    }
-  }
-  return outcome;
+  const batchStarts: number[] = [];
+  for (let i = 0; i < requests.length; i += MEANING_BATCH_SIZE) batchStarts.push(i);
+  const outcomes = await mapWithConcurrency(batchStarts, MEANING_CONCURRENCY, (start) =>
+    requestBatch(requests.slice(start, start + MEANING_BATCH_SIZE), start / MEANING_BATCH_SIZE + 1, model, retry),
+  );
+  return {
+    done: outcomes.flatMap((o) => o.done),
+    failedIds: outcomes.flatMap((o) => o.failedIds),
+  };
 }

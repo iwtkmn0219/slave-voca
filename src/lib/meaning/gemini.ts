@@ -63,9 +63,9 @@ export function createGeminiMeaningModel(
         systemInstruction: SYSTEM_INSTRUCTION,
         responseMimeType: 'application/json',
         responseJsonSchema: RESPONSE_JSON_SCHEMA,
-        // 3.x는 사고를 끌 수 없다. 가장 낮은 MINIMAL로 사고 토큰(출력 요금에 포함)을 줄인다.
-        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-        // 200개 묶음의 출력이 약 5,500토큰(실측)이라 여유를 둔다. 과금은 실제 출력량만큼이다.
+        // 2026-10-16 실측(M4-4): LOW가 MINIMAL보다 문맥 오답이 적었고 비용은 같았다(사고 토큰은 출력 요금에 포함).
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        // 묶음 50개의 출력은 약 1,500토큰이지만, 200개 묶음(약 5,500토큰)에 맞춘 여유를 그대로 둔다. 과금은 실제 출력량만큼이다.
         maxOutputTokens: 16384,
       },
     });

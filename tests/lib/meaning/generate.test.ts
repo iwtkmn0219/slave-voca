@@ -3,6 +3,7 @@ import {
   generateMeanings,
   isRetryableError,
   MEANING_BATCH_SIZE,
+  MEANING_CONCURRENCY,
   type MeaningModel,
   type MeaningRequest,
 } from '@/lib/meaning/generate';
@@ -15,17 +16,46 @@ const echoModel: MeaningModel = async (batch) =>
   batch.map((r) => ({ id: r.id, meaningKo: `뜻${r.id}` }));
 
 describe('generateMeanings', () => {
-  it('sends batches of 200 and collects every meaning', async () => {
+  it('sends batches of 50 and collects every meaning', async () => {
     const sizes: number[] = [];
     const model: MeaningModel = async (batch) => {
       sizes.push(batch.length);
       return echoModel(batch);
     };
-    const outcome = await generateMeanings(requests(450), model);
-    expect(MEANING_BATCH_SIZE).toBe(200);
-    expect(sizes).toEqual([200, 200, 50]);
-    expect(outcome.done).toHaveLength(450);
+    const outcome = await generateMeanings(requests(460), model);
+    expect(MEANING_BATCH_SIZE).toBe(50);
+    expect(sizes).toEqual([50, 50, 50, 50, 50, 50, 50, 50, 50, 10]);
+    expect(outcome.done).toHaveLength(460);
     expect(outcome.failedIds).toEqual([]);
+  });
+
+  it('keeps at most 5 batches in flight at once', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const model: MeaningModel = async (batch) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight--;
+      return echoModel(batch);
+    };
+    const outcome = await generateMeanings(requests(1000), model);
+    expect(MEANING_CONCURRENCY).toBe(5);
+    expect(maxInFlight).toBe(5);
+    expect(outcome.done).toHaveLength(1000);
+  });
+
+  it('returns results in batch order even when later batches finish first', async () => {
+    const finished: number[] = [];
+    const model: MeaningModel = async (batch) => {
+      const batchNo = (batch[0].id - 1) / 50;
+      await new Promise((resolve) => setTimeout(resolve, (5 - batchNo) * 10));
+      finished.push(batchNo);
+      return echoModel(batch);
+    };
+    const outcome = await generateMeanings(requests(230), model);
+    expect(finished).toEqual([4, 3, 2, 1, 0]);
+    expect(outcome.done.map((d) => d.id)).toEqual(Array.from({ length: 230 }, (_, i) => i + 1));
   });
 
   it('fails ids that are missing, blank, or not part of the batch', async () => {
@@ -40,15 +70,18 @@ describe('generateMeanings', () => {
   });
 
   it('fails only the batch whose request threw', async () => {
-    let call = 0;
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const model: MeaningModel = async (batch) => {
-      call++;
-      if (call === 1) throw new Error('rate limited');
+      if (batch[0].id === 51) throw new Error('rate limited');
       return echoModel(batch);
     };
     const outcome = await generateMeanings(requests(210), model);
-    expect(outcome.failedIds).toHaveLength(200);
-    expect(outcome.done.map((d) => d.id)).toEqual(Array.from({ length: 10 }, (_, i) => 201 + i));
+    expect(outcome.failedIds).toEqual(Array.from({ length: 50 }, (_, i) => 51 + i));
+    expect(outcome.done.map((d) => d.id)).toEqual([
+      ...Array.from({ length: 50 }, (_, i) => 1 + i),
+      ...Array.from({ length: 110 }, (_, i) => 101 + i),
+    ]);
+    error.mockRestore();
   });
 
   it('does nothing for an empty request list', async () => {
@@ -97,8 +130,8 @@ describe('generateMeanings retries', () => {
     };
     const outcome = await generateMeanings(requests(210), model, h.options);
     expect(firstBatchCalls).toBe(4);
-    expect(outcome.failedIds).toHaveLength(200);
-    expect(outcome.done).toHaveLength(10);
+    expect(outcome.failedIds).toHaveLength(50);
+    expect(outcome.done).toHaveLength(160);
     expect(h.waits).toEqual([1000, 2000, 4000]);
     h.restore();
   });

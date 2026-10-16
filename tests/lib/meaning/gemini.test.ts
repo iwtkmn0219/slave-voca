@@ -23,7 +23,7 @@ function fakeClient(response: { text?: string; candidates?: { finishReason?: str
 const batch = [{ id: 7, word: 'address', sentence: 'We address the problem.' }];
 
 describe('createGeminiMeaningModel', () => {
-  it('asks Gemini 3.5 Flash-Lite for JSON at minimal thinking and maps the result', async () => {
+  it('asks Gemini 3.5 Flash-Lite for JSON at low thinking and maps the result', async () => {
     const { client, calls } = fakeClient({
       text: JSON.stringify({ meanings: [{ id: 7, meaning_ko: '다루다' }] }),
     });
@@ -35,7 +35,7 @@ describe('createGeminiMeaningModel', () => {
       model: 'gemini-3.5-flash-lite',
       config: {
         responseMimeType: 'application/json',
-        thinkingConfig: { thinkingLevel: 'MINIMAL' },
+        thinkingConfig: { thinkingLevel: 'LOW' },
         maxOutputTokens: 16384,
       },
     });
