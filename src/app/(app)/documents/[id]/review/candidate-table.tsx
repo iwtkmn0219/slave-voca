@@ -4,7 +4,9 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { buttonClass } from "@/components/ui/button";
 import { Highlighted } from "@/components/ui/highlighted";
 import { Kbd } from "@/components/ui/kbd";
-import { Status } from "@/components/ui/status";
+import { Notice } from "@/components/ui/notice";
+import { Failed, Status } from "@/components/ui/status";
+import { LIMIT_SAVE } from "@/lib/regen-messages";
 import { Tag } from "@/components/ui/tag";
 import { shortSentence } from "@/lib/text/truncate";
 import {
@@ -49,7 +51,7 @@ export function CandidateTable({
   const [focus, setFocus] = useState(0);
   const [anchor, setAnchor] = useState<number | null>(null);
   const [saving, startSaving] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; limitResetsOn?: string } | null>(null);
   const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
 
   const visible = candidates.filter((c) => matchesFilter(c, filter, selected));
@@ -76,9 +78,10 @@ export function CandidateTable({
 
   const save = () => {
     if (saving) return;
+    setError(null); // 다시 누르면 앞의 안내를 지운다(C 화면 규칙 4.1)
     startSaving(async () => {
       const result = await saveReview(documentId, [...selected]);
-      if (result?.error) setError(result.error);
+      if (result?.error) setError({ text: result.error, limitResetsOn: result.limitResetsOn });
     });
   };
 
@@ -177,9 +180,15 @@ export function CandidateTable({
       </div>
 
       {error && (
-        <p role="alert" className="px-10 pt-3 text-sm text-again">
-          {error}
-        </p>
+        <div className="px-10 pt-3">
+          {error.limitResetsOn ? (
+            <Notice>{LIMIT_SAVE(error.limitResetsOn)}</Notice>
+          ) : (
+            <p role="alert" className="text-sm">
+              <Failed>{error.text}</Failed>
+            </p>
+          )}
+        </div>
       )}
 
       <div className={`overflow-x-auto px-7 max-[900px]:px-2 ${saving ? "pointer-events-none opacity-45" : ""}`} aria-busy={saving}>

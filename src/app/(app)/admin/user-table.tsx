@@ -14,13 +14,14 @@ export interface UserRowData {
   status: UserStatus;
   role: UserRole;
   joined: string;
+  monthWords: number; // 이번 달(한국 시간) 뜻을 만든 단어 수
 }
 
 type NextStatus = "approved" | "blocked";
 
 // 사용자 표(화면 규칙 6장). 처리한 뒤에도 행은 그 자리에 둔다: 처음 그려진 순서를 기억하고, 상태만 그 자리에서 바꾼다.
 // 다음에 화면을 열 때 서버가 다시 정렬한다.
-export function UserTable({ rows, selfId }: { rows: UserRowData[]; selfId: string }) {
+export function UserTable({ rows, selfId, wordLimit }: { rows: UserRowData[]; selfId: string; wordLimit: number }) {
   const [initial] = useState(() => ({
     order: rows.map((r) => r.id),
     pendingCount: rows.filter((r) => r.status === "pending").length,
@@ -81,9 +82,10 @@ export function UserTable({ rows, selfId }: { rows: UserRowData[]; selfId: strin
         <thead>
           <tr className="border-b border-line text-left text-xs font-semibold text-muted">
             <th className="px-4 py-2.5 font-semibold">사용자</th>
-            <th className="w-[150px] px-4 py-2.5 font-semibold">상태</th>
+            <th className="w-[130px] px-4 py-2.5 font-semibold">상태</th>
+            <th className="w-[130px] px-4 py-2.5 text-right font-semibold">이번 달 단어</th>
             <th className="w-[120px] px-4 py-2.5 font-semibold">가입</th>
-            <th className="px-4 py-2.5 text-right font-semibold">동작</th>
+            <th className="w-[150px] px-4 py-2.5 text-right font-semibold">동작</th>
           </tr>
         </thead>
         <tbody>
@@ -140,6 +142,9 @@ export function UserTable({ rows, selfId }: { rows: UserRowData[]; selfId: strin
                       </div>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-right text-sm whitespace-nowrap tabular-nums">
+                    <MonthWords value={user.monthWords} limit={wordLimit} />
+                  </td>
                   <td className="px-4 py-3 text-[13px] whitespace-nowrap text-ink-2 tabular-nums">{user.joined}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {!isSelf && (
@@ -166,10 +171,23 @@ function FragmentRow({ divider, children }: { divider: boolean; children: React.
     <>
       {divider && (
         <tr aria-hidden>
-          <td colSpan={4} className="h-0 border-b-2 border-line-strong p-0" />
+          <td colSpan={5} className="h-0 border-b-2 border-line-strong p-0" />
         </tr>
       )}
       {children}
     </>
+  );
+}
+
+// "이번 달 단어" 칸(C 화면 규칙 5.3). 한도에 닿았으면 hard 점과 "한도"를 붙인다.
+function MonthWords({ value, limit }: { value: number; limit: number }) {
+  const text = value.toLocaleString("ko-KR");
+  if (value === 0) return <span className="text-muted">0</span>;
+  if (value < limit) return <span>{text}</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden className="size-[7px] rounded-full bg-hard" />
+      {text} <span className="text-[13px] text-ink-2">한도</span>
+    </span>
   );
 }

@@ -6,8 +6,8 @@ import { buttonClass } from "@/components/ui/button";
 import { Highlighted } from "@/components/ui/highlighted";
 import { Kbd } from "@/components/ui/kbd";
 import { RegenIdleButton, RegenSlot, type RegenState } from "@/components/ui/regen-slot";
-import { REGEN_FAILED } from "@/lib/regen-messages";
-import { Failed, Spinner } from "@/components/ui/status";
+import { LIMIT_CARD, REGEN_FAILED } from "@/lib/regen-messages";
+import { Failed, Limited, Spinner } from "@/components/ui/status";
 import { Tag } from "@/components/ui/tag";
 import { formatInterval } from "@/lib/srs/interval";
 import type { Answer } from "@/lib/srs/scheduler";
@@ -133,13 +133,19 @@ function UsageBlock({
           — <span className="font-en text-[13.5px] italic">{usage.documentTitle}</span>
         </p>
         <div className="flex h-5 shrink-0 items-center whitespace-nowrap">
-          <RegenSlot
-            state={regen}
-            onRegenerate={onRegenerate}
-            idle={<RegenIdleButton onRegenerate={onRegenerate} />}
-          />
+          {regen?.phase !== "limited" && (
+            <RegenSlot
+              state={regen}
+              onRegenerate={onRegenerate}
+              idle={<RegenIdleButton onRegenerate={onRegenerate} />}
+            />
+          )}
         </div>
       </div>
+      {/* 한도 문구는 길어서 출처 아래 한 줄을 통째로 쓴다(C 화면 규칙 4.3) */}
+      <p aria-live="polite" className="mt-1 empty:hidden">
+        {regen?.phase === "limited" && <Limited className="text-[12.5px]">{regen.text}</Limited>}
+      </p>
     </div>
   );
 }
@@ -294,7 +300,11 @@ export function StudySession({ cards, autoSpeak }: { cards: StudyCard[]; autoSpe
     requestRegeneration(occurrenceId)
       .then((result) => {
         if (result.error !== null) {
-          finish({ phase: "failed", text: result.error });
+          finish(
+            result.limitResetsOn
+              ? { phase: "limited", text: LIMIT_CARD(result.limitResetsOn) }
+              : { phase: "failed", text: result.error },
+          );
           return;
         }
         meaningsRef.current.set(occurrenceId, { meaningKo: result.meaningKo, meaningStatus: result.meaningStatus });

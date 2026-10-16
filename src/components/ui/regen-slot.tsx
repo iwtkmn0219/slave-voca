@@ -1,9 +1,14 @@
 import { MISSING_KEY_MESSAGE } from "@/lib/regen-messages";
 import { keepFocus } from "@/lib/ui/keys";
-import { Spinner } from "./status";
+import { Limited, Spinner } from "./status";
 
 // 뜻 다시 만들기의 진행·결과. 뜻은 제자리에 흐리게 두고(높이가 변하지 않게) 상태는 버튼 자리에 보인다.
-export type RegenState = { phase: "busy" } | { phase: "done" } | { phase: "failed"; text: string };
+// limited: 이번 달 한도에 걸림(C-1). 다시 눌러도 같으므로 "다시 시도"를 두지 않는다.
+export type RegenState =
+  | { phase: "busy" }
+  | { phase: "done" }
+  | { phase: "failed"; text: string }
+  | { phase: "limited"; text: string };
 
 // 평소에는 점선 밑줄, 마우스·키보드 포커스에서 강조색 실선 밑줄.
 export const regenButtonClass =
@@ -37,6 +42,8 @@ export function RegenSlot({
         <span className="inline-flex items-center gap-1.5 text-muted">
           <Spinner /> 다시 만드는 중
         </span>
+      ) : state.phase === "limited" ? (
+        <Limited>{state.text}</Limited>
       ) : state.phase === "done" ? (
         <>
           <span className="text-muted">새 뜻으로 바꿨습니다 ·</span>
