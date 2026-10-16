@@ -23,9 +23,9 @@
 | 배포 | 1차 범위 밖. 단, 저장소 계층을 분리해 나중에 옮기기 쉽게 설계 |
 | 스택 | Next.js(App Router, TypeScript) 하나로 화면과 서버 |
 | DB | SQLite (Drizzle ORM + better-sqlite3) |
-| 단어 추출 | 빈도 기준. 흔한 단어 상위 5,000개(원형 기준) 제외, 설정에서 변경 가능 |
+| 단어 추출 | 빈도 기준(wordfreq). 흔한 단어 상위 3,000개(원형 기준) 제외, 설정에서 변경 가능 (M5에서 5,000 → 3,000) |
 | 문맥 뜻 | Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`), 문서 단위로 묶어 요청 (2026-10-13 Claude Haiku 5.5에서 교체, 2026-10-16 3.6 Flash에서 되돌림) |
-| 발음기호 | Free Dictionary API (`api.dictionaryapi.dev`) |
+| 발음기호 | CMU Pronouncing Dictionary(BSD, 미국식). M5에서 Free Dictionary API를 뺐다 |
 | 발음 듣기 | 브라우저 내장 Web Speech API (`speechSynthesis`, en-US) |
 | 암기 방식 | FSRS 간격 반복 (`ts-fsrs` 라이브러리) |
 | 새 카드 상한 | 하루 20장, 남은 카드는 다음 날로 이월. 설정에서 변경 가능 |
@@ -76,7 +76,7 @@ src/
     repo/*.ts             모든 DB 읽기·쓰기
 data/
   frequency.json          원형 → 순위 (빌드 스크립트로 생성)
-  awl.json                AWL 대표어 570개 (공식 문서에서 1회 추출, 8.7)
+  frequency-NOTICE.md     빈도표 출처와 라이선스(CC BY-SA 4.0, 8.3)
 scripts/
   build-frequency.ts      공개 영어 빈도 목록 → 원형 기준 순위표
 ```
@@ -93,7 +93,7 @@ scripts/
 | `occurrences` | id, word_id, document_id, surface, sentence, meaning_ko, meaning_status(pending/done/failed), created_at | 같은 단어도 문서마다 뜻이 다를 수 있어 뜻은 여기에 저장 |
 | `known_words` | lemma(PK), created_at | 추출에서 제외 |
 | `review_logs` | id, word_id, rating, reviewed_at | 복습 기록 |
-| `settings` | key(PK), value | `exclude_top_n`=5000, `daily_new_limit`=20 |
+| `settings` | key(PK), value | `exclude_top_n`=3000, `daily_new_limit`=20 |
 
 - 같은 단어가 다른 문서에서 다시 저장되면 `words`는 그대로 두고 `occurrences`만 추가한다. SRS 상태는 초기화하지 않는다.
 - 카드 삭제는 `words`와 그 `occurrences`, `review_logs`를 함께 지운다. 삭제한 단어는 `known_words`에 넣지 않는다.
@@ -115,18 +115,19 @@ scripts/
 2. 3글자 미만, 모두 대문자인 약어(예: `CNN`), 하이픈 복합어, **ASCII가 아닌 글자가 든 토큰**(`Łukasz`)은 버린다. 유니코드 기준으로 뽑은 뒤 버려야 `Łukasz`가 `ukasz` 조각으로 남지 않는다.
 3. 소문자로 바꾸고 `wink-lemmatizer`로 원형을 만든다(명사→동사→형용사 순으로 시도해 처음으로 형태가 바뀐 결과, 없으면 그대로).
 4. 문장 첫 단어가 아닌 위치에서 **항상 대문자로만** 나온 단어는 고유명사로 보고 버린다. (한계: 문장 첫머리에만 나오는 인명은 거르지 못한다. 검토 화면에서 사용자가 해제한다.)
-5. 빈도 순위가 `exclude_top_n` 이하인 단어(표면형 또는 원형)와 `known_words`에 있는 원형을 버린다. 표면형도 보는 이유: `data`의 원형이 `datum`으로 바뀌어 흔한 단어가 새어 나오는 것을 막는다. 빈도표에 없는 원형은 남긴다(전문용어일 가능성이 높음). **예외: 원형이 학술 핵심어 목록(8.7)에 있고 순위가 2,001 이상이면 남긴다.** 상위 2,000위 안의 AWL 단어 174개(area, data, code 등)는 쉬워서 예외에서 뺀다. `known_words` 제외는 예외 없이 적용한다.
+5. 빈도 순위가 `exclude_top_n` 이하인 단어(표면형 또는 원형)와 `known_words`에 있는 원형을 버린다. 표면형도 보는 이유: `data`의 원형이 `datum`으로 바뀌어 흔한 단어가 새어 나오는 것을 막는다. 빈도표에 없는 원형은 남긴다(전문용어일 가능성이 높음). 학술 핵심어 예외는 없다(M5에서 없앰, 8.7).
 6. 원형별로 묶어 등장 횟수와 원문 문장을 기록한다. 원문 문장은 첫 등장 문장을 쓰되, 300자를 넘으면 **단어가 보이도록 단어 주변을 잘라** 300자로 맞춘다(앞뒤로 잘린 쪽에 `…`). `words`에 이미 있으면 `is_existing=true`.
 7. **복수형 보정:** 원형이 `s`로 끝나고(`ss`로 끝나는 것은 제외) `s`를 뗀 형태가 같은 문서의 후보에 있으면, 그 후보에 횟수를 합친다(`datasets` → `dataset`). 원문 문장은 합쳐지는 쪽(`dataset`)의 것을 유지한다.
 8. **사전 확인:** 원형이 영어 단어 목록(`wink-lexicon`의 WordNet 단어 77,262개, MIT 라이선스, 이미 설치됨)에 있으면 `in_dictionary=true`. 없으면 검토 화면에서 기본 체크 해제하고 "사전에 없음"을 표시한다. 버리지는 않는다. 알려진 한계: `dataset`, `encoder`, `embedding` 같은 최신 전문용어도 사전에 없음으로 나온다. 반대로 `err`, `std`는 사전에 있어 그대로 통과한다.
 9. 등장 횟수 내림차순, 같으면 알파벳순으로 정렬한다.
-10. 빈도표·학술어 목록 조회는 객체의 프로토타입 키(`constructor` 등)에 반응하지 않아야 한다.
+10. 빈도표 조회는 객체의 프로토타입 키(`constructor` 등)에 반응하지 않아야 한다.
 
-### 8.3 빈도표 (`scripts/build-frequency.ts`)
+### 8.3 빈도표 (`scripts/export-wordfreq.py`, `scripts/build-frequency.ts`)
 
-- 입력: 공개 영어 빈도 목록 `first20hours/google-10000-english`의 `20k.txt` (빈도순 단어 2만 개)
-- 각 단어와 그 원형(8.2의 3번 방식)을 둘 다 키로 넣고, 키별 **가장 높은 순위**를 남겨 `data/frequency.json`으로 저장한다.
-- 리스크: 이 목록은 웹 문서 기반이라 학술 기본어 순위가 실제와 다를 수 있다. 마일스톤 1에서 확인한 결과, 순위 2,001~5,000에 학술 핵심어가 논문마다 약 140개씩 들어 있었다(hence, whereas, derive 등). 이 문제는 N을 낮추지 않고 8.7의 학술 핵심어 목록으로 보완한다. N 기본값은 5,000을 유지한다.
+- 입력: `wordfreq` 3.1.1(데이터 CC BY-SA 4.0)의 영어 빈도순 단어에서 알파벳 소문자 단어만 골라 앞에서 20,000개. 순위는 거른 뒤의 위치다. (M5에서 `first20hours/google-10000-english`에서 교체: 원본이 상업적 사용에 LDC 라이선스를 요구한다.)
+- `npm run freq:build`: Python 스크립트가 `data/wordfreq-en.txt`(커밋 안 함)를 쓰고, TS 스크립트가 각 단어와 그 원형(8.2의 3번 방식)을 둘 다 키로 넣어 키별 **가장 높은 순위**를 `data/frequency.json`(커밋함, 20,464개 항목)으로 저장한다. 앱·테스트·CI에는 Python이 필요 없다.
+- 출처 표시: `data/frequency-NOTICE.md`(wordfreq와 SUBTLEX·Google Books Ngram·OpenSubtitles 인용, 파생 파일의 CC BY-SA 4.0). README 데이터 출처 표.
+- N 기본값은 3,000이다. 논문에는 일상어가 드물어, 학술 핵심어 예외 없이도 hence, whereas, respectively, subsequent, substantial 등이 남는다(M5 실측: 목표 15개 중 11개, 편당 후보 255~278개). 놓치는 것: novel, adopt, despite, widely. 대신 accuracy, algorithm 같은 쉬운 기술어가 처음 몇 편에 섞이고, "안다"로 정리하면 빠진다.
 
 ### 8.4 문맥 뜻 생성 (`lib/meaning/generate.ts`)
 
@@ -143,14 +144,12 @@ scripts/
 - 응답에 빠진 id나 요청 실패는 해당 용례를 `meaning_status=failed`로 둔다. 문서 단어 목록에서 재시도할 수 있다.
 - SDK 사용법은 `@google/genai` 공식 문서(googleapis.github.io/js-genai)를 따른다.
 
-### 8.5 발음기호 (`lib/phonetic/lookup.ts`)
+### 8.5 발음기호 (`lib/phonetic/cmudict.ts`, `lib/phonetic/arpabet.ts`, `data/cmudict.txt`)
 
-- `GET https://api.dictionaryapi.dev/api/v2/entries/en/{lemma}` 응답에서 첫 번째로 비어 있지 않은 `phonetic` 또는 `phonetics[].text`를 쓴다.
-- 404나 오류가 나면 아래 CMUdict 보조로 넘어간다. 재시도하지 않는다.
-- 동시 요청은 5개, 요청당 5초 제한. 연속 5번 장애(시간 초과·네트워크 오류·5xx·**429**)가 나면 남은 단어는 API를 건너뛰고 CMUdict만 쓴다. 404는 장애로 세지 않는다. (M2에서는 429를 404처럼 다뤄 차단기에 세지 않았다. M3에서 장애로 바꾼다.)
-- **CMUdict 보조 (`lib/phonetic/cmudict.ts`, `lib/phonetic/arpabet.ts`, `data/cmudict.txt`):** API에서 발음기호를 얻지 못한 단어는 CMU Pronouncing Dictionary(BSD 2-clause, 미국식 발음)에서 원형으로 찾는다. 여러 발음이 있으면 첫 번째를 쓴다. ARPAbet 표기를 IPA로 바꿔 `/.../` 형태로 저장한다. 강세 기호(ˈ, ˌ)는 강세 모음 바로 앞 자음 하나 앞에 붙이는 근사 규칙을 쓴다(음절 분리는 하지 않음). 그래도 없으면 `phonetic=null`.
+- CMU Pronouncing Dictionary(BSD 2-clause, 미국식 발음)에서 원형으로 찾는다. 여러 발음이 있으면 첫 번째를 쓴다. ARPAbet 표기를 IPA로 바꿔 `/.../` 형태로 저장한다. 강세 기호(ˈ, ˌ)는 최대 두음 규칙으로 강세 모음 앞 자음군 앞에 붙인다. 없으면 `phonetic=null`(발음 듣기는 그대로 된다).
+- CMUdict 조회 자체가 실패하면(파일 없음 등) 저장을 오류로 만들지 않고 발음기호 없이 둔다. 로그는 한 번만 남긴다.
 - CMUdict 데이터는 빌드 스크립트(`scripts/build-cmudict.ts`)가 고정 커밋의 원본에서 알파벳 소문자 단어의 첫 발음만 남긴 ARPAbet 목록(`data/cmudict.txt`, 약 11만 7천 단어, 3MB)으로 만들어 커밋한다. IPA 변환은 조회할 때 한다. 파일은 번들에 넣지 않고 서버에서 처음 쓸 때 한 번 읽는다. 저작권 고지는 `data/cmudict-LICENSE`로 함께 둔다.
-- API와 CMUdict는 서로 다른 출처라 표기가 조금 다를 수 있다(API는 영국식이 섞임). 학습용으로는 허용한다.
+- (M5에서 없앰) Free Dictionary API(`dictionaryapi.dev`) 보조: 이용 조건이 명시돼 있지 않고, 실측에서 CMUdict에 없는 단어(후보의 약 13%, regularization, softmax 등 전문어)를 하나도 채우지 못했다.
 
 ### 8.6 SRS (`lib/srs/scheduler.ts`)
 
@@ -159,14 +158,11 @@ scripts/
 - 새 카드를 처음 응답하면 `introduced_at`을 기록한다. "오늘"은 로컬 자정을 기준으로 한다.
 - 큐는 복습 화면을 열 때 계산하고, 응답할 때마다 서버에 저장한다. Again을 받은 카드는 같은 세션 끝에 다시 보여준다.
 
-### 8.7 학술 핵심어 목록 (`data/awl.json`)
+### 8.7 학술 핵심어 목록 (M5에서 없앰)
 
-- 출처: Coxhead의 Academic Word List(AWL, 2000). 대표어(headword) 570개를 원형화해 저장한다.
-- 용도: 8.2의 5번 예외. 이 목록에 있고 빈도 순위가 2,001 이상인 원형은 `exclude_top_n` 안이어도 후보로 남긴다. 2,001~5,000위 구간에 166개가 있다(achieve, adequate, assume, hence, whereas 등).
-- 파일: 공식 대표어 문서(`Headwords-of-the-Academic-Word-List.docx`, Victoria University of Wellington)에서 1회 추출한 570개 단어의 JSON 배열. **저장소에는 넣지 않는다**(`.gitignore`). 서버가 처음 쓸 때 fs로 한 번 읽고 원형화한다. 파일이 없으면 학술어 예외 없이 동작하고, AWL 테스트는 건너뛴다.
-- 철자: 목록은 영국식이다. 실제 영국식 철자인 대표어 4개(analyse, maximise, minimise, utilise)에만 미국식 형태(analyze, maximize, minimize, utilize)를 함께 넣는다. comprise, likewise, precise, revise처럼 -ise로 끝나도 철자 변형이 없는 단어에는 적용하지 않는다.
-- 한계: 대표어만 쓰므로 M1에서 꼽은 학술 핵심어 23개 중 약 13개만 살아난다(respectively, numerous, novel, substantial, adopt 등은 AWL 대표어가 아님). 나머지는 사용자가 N을 조정하거나 나중에 단어군(word family) 목록을 도입할 때 다룬다.
-- 라이선스: 명시된 이용 조건이 없다(대학 페이지에는 저작권 표시만 있음). **로컬 개인용으로만 쓴다.** 2026-10-16 저장소 공개 결정(사용자)에 따라 파일을 저장소와 커밋 기록 전체에서 지웠다(M2 계획서에 붙여 둔 목록 포함). 앱을 배포하기 전에는 다시 검토한다. (같은 목적의 NAWL은 CC BY-SA 4.0이지만, 일상 고빈도어를 제외한 목록이라 목표 단어 10개 중 하나도 없어서 쓰지 않는다.)
+- M2~M4에서는 Coxhead의 Academic Word List(AWL) 대표어 570개로, 빈도 순위 2,001 이상인 학술 핵심어를 기준 N 안이어도 남겼다.
+- AWL은 이용 조건이 밝혀져 있지 않아(대학 페이지에는 저작권 표시만 있음) 상업적으로 쓸 수 없다. 2026-10-16 저장소 공개 때 목록을 저장소와 기록에서 지웠고, M5에서 예외 규칙과 코드도 없앴다. 그 대신 N 기본값을 3,000으로 낮췄다(8.3).
+- 대안 실측(M5 설계서 2장): NAWL(CC BY-SA 4.0)은 목표 단어가 없어 보탬이 없었고, arXiv 초록(CC0)으로 만든 목록은 쉬운 주제어를 너무 많이 끌어왔다.
 
 ## 9. 오류 처리
 
@@ -177,7 +173,7 @@ scripts/
 | 후보 0개 | 검토 화면에 "외울 단어가 없습니다" 표시, 문서는 `done` |
 | `GEMINI_API_KEY` 없음 | 카드는 저장하고 뜻은 `failed`, 화면에 키 설정 안내 |
 | Gemini API 실패, 응답 누락·차단 | 해당 용례 `failed`, 재시도 버튼 |
-| 사전 API 실패 | 발음기호만 비움, 발음 듣기는 유지 |
+| CMUdict에 없음·조회 실패 | 발음기호만 비움, 발음 듣기는 유지 |
 | 브라우저 TTS 없음 | 발음 버튼 숨김 |
 
 ## 10. 테스트
@@ -212,11 +208,13 @@ scripts/
    - M2 리뷰에서 넘어온 항목: (M4-1에서 해결) 저장 입력 검사(정수 배열), 단수형이 아는 단어일 때 복수형이 남는 문제, 발음 구별 기호 단어(naïve, café) 제외 문제, 짧은 단어 복수형 오병합(lens→len), (M4-4에서 해결) 뜻 묶음 동시 요청(키로 측정 후), 저장 후 백그라운드 채우기(검토), Gemini 차단 시 blockReason 메시지, 429 백오프 재시도
    - UI 개편 리뷰에서 넘어온 항목: (M4-1에서 해결) 완료 화면 "다시 확인" 링크 위 Enter, 응답 후 메뉴 배지 갱신. 남은 것: 다크 토큰 두 벌 정의 정리, `documents/[id]/page.tsx` 삼항식 정리
    - (해결됨) 채우기 실패(error) 문서에서 단어 목록으로 가는 링크: UI 개편의 `documentHref`로 해결
+5. **배포 준비(베타 로드맵, 2026-10-16 사용자 결정):** 목표는 수익화. 먼저 지인 10명 안팎의 비공개 베타(1.0.0), 결제는 그 뒤(1.x). 단계: A 데이터 라이선스(0.5.0) → B 로그인·사용자별 데이터(0.6.0) → C 배포 기반·사용량 제한·모바일 화면(0.7.0) → D 개인정보 안내·서비스 이름·배포(1.0.0) → E 결제
+   - **M5 (설계, 2026-10-16):** A 데이터 라이선스. 빈도표를 wordfreq(CC BY-SA 4.0)로, N 기본값 3,000, 학술 핵심어 예외와 사전 API를 없앰. 설계 `docs/superpowers/specs/2026-10-16-m5-data-license-design.md`, 계획 `docs/superpowers/plans/2026-10-16-m5-data-license.md`
 
 ## 12. 열린 항목
 
 - Gemini API 키 발급 여부: 아직 없다(2026-10-13 확인). Google AI Studio에서 무료로 발급할 수 있다. 키가 없어도 마일스톤 2의 추출 개선, 저장, 발음기호는 진행할 수 있다. 뜻 생성은 테스트에서 SDK를 목으로 대체하고, 실제 호출 확인만 키를 받은 뒤 한다.
-- AWL 라이선스: 저장소 공개 때 목록을 저장소에서 뺐다(2026-10-16). 앱 배포 전에 다시 검토한다(8.7).
+- (M5에서 해결) AWL 라이선스: 학술 핵심어 예외를 없앴다(8.7). 상업적 이용 허락을 받으면 다시 넣을 수 있다.
 
 ## 13. 변경 이력
 
@@ -245,3 +243,4 @@ scripts/
 - 2026-10-16: M4-4 완료 반영(사고 단계 LOW, 묶음 50개, 동시 5개)
 - 2026-10-16: GitHub 공개(사용자 결정, MIT). AWL 목록을 저장소·기록에서 빼고 실행 시 있으면 읽도록 바꿈(8.7). 기록을 고쳐 쓰면서 커밋 해시가 바뀌어, 문서의 해시를 새 값으로 갱신
 - 2026-10-16: 브랜치·PR 흐름과 버전 관리 결정(사용자). main은 배포용, development는 개발 통합용(기본 브랜치). 설계 `docs/superpowers/specs/2026-10-16-github-flow-versioning-design.md`, 첫 릴리스 v0.4.0
+- 2026-10-16: 배포 준비 로드맵(비공개 베타 먼저) 추가. M5 설계: 빈도표 wordfreq, N 기본값 3,000, 학술 핵심어 예외·사전 API 없앰(2장, 8.2, 8.3, 8.5, 8.7, 10장, 12장)
