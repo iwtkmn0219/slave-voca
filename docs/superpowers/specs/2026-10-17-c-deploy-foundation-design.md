@@ -1,6 +1,6 @@
 # C단계 설계: 배포 기반(베타 로드맵 C, v0.7.0)
 
-- 상태: 사용자 승인(2026-10-17). 화면 규칙 `2026-10-17-c-screens.md`(Designer). 계획서: C-1 `docs/superpowers/plans/2026-10-17-c1-usage-limits.md`
+- 상태: 사용자 승인(2026-10-17). 화면 규칙 `2026-10-17-c-screens.md`(Designer). 계획서: C-1 `docs/superpowers/plans/2026-10-17-c1-usage-limits.md`(완료, PR #20), C-3 `docs/superpowers/plans/2026-10-17-c3-mobile-study.md`
 - 상위 설계서: `2026-10-13-slave-voca-design.md` 11장 5번(베타 로드맵)
 - 앞 단계: M6(로그인·사용자별 데이터, v0.6.0). Google 로그인은 사용자가 OAuth 클라이언트를 만든 뒤 실제로 확인했다(2026-10-16, 로컬 `http://localhost:3300`).
 
@@ -108,6 +108,7 @@ Gemini는 PDF를 올릴 때가 아니라 **뜻을 만들 때** 부른다. 입구
 
 - **형식:** 주소의 호스트가 `discord.com`·`discordapp.com`이면 `{ content }`, `hooks.slack.com`이면 `{ text }`로 보낸다. 그 밖의 주소는 보내지 않고 로그에 남긴다.
 - **알림에 넣지 않는 것:** 문서 문장, 뜻, 비밀값, 세션 정보
+- **서버 오류 알림 내용(C-1 리뷰 반영):** 오류 종류(name), code, status만 보낸다. 메시지는 값(문장·키)을 담을 수 있어 서버 로그에만 남긴다.
 - **보내기 실패:** 앱 동작을 막지 않는다. 5초 안에 끝나지 않으면 포기하고 로그에 남긴다.
 - **"한 달에 한 번" 기록:** DB에 남겨 서버가 다시 시작해도 다시 보내지 않는다. 10분 조건은 메모리에 둔다.
 
