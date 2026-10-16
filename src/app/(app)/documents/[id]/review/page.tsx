@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { connection } from "next/server";
 import { Suspense } from "react";
 import { getDb } from "@/server/db/client";
 import { listCandidates } from "@/server/repo/candidates";
 import { getDocument } from "@/server/repo/documents";
 import { CandidateTable } from "./candidate-table";
+import { requireUser } from "@/server/auth/current-user";
 
 export default function ReviewPage({ params }: PageProps<"/documents/[id]/review">) {
   return (
@@ -16,7 +16,7 @@ export default function ReviewPage({ params }: PageProps<"/documents/[id]/review
 }
 
 async function Review({ params }: { params: Promise<{ id: string }> }) {
-  await connection();
+  await requireUser();
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
 

@@ -6,6 +6,7 @@ import { ANSWERS, type Answer } from "@/lib/srs/scheduler";
 import { isId } from "@/lib/validate";
 import { getDb } from "@/server/db/client";
 import { recordAnswer, StudyError, undoAnswer } from "@/server/repo/study";
+import { requireUser } from "@/server/auth/current-user";
 
 export type AnswerResult =
   | { error: string }
@@ -14,6 +15,7 @@ export type AnswerResult =
 // 복습 응답 하나를 저장한다. 성공하면 다음 복습 시각, 응답 뒤 상태의 간격 미리보기,
 // 되돌리기에 쓸 기록 id를 돌려준다.
 export async function answerCard(wordId: number, answer: Answer): Promise<AnswerResult> {
+  await requireUser();
   if (!Number.isInteger(wordId) || !ANSWERS.includes(answer)) {
     return { error: "잘못된 요청입니다." };
   }
@@ -33,6 +35,7 @@ export async function answerCard(wordId: number, answer: Answer): Promise<Answer
 export type UndoResult = { error: null } | { error: string; rejected: boolean };
 
 export async function undoLastAnswer(logId: unknown): Promise<UndoResult> {
+  await requireUser();
   if (!isId(logId)) return { error: "잘못된 요청입니다.", rejected: true };
   try {
     undoAnswer(getDb(), logId);

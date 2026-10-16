@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { connection } from "next/server";
 import { Suspense } from "react";
 import { DocumentStatusLabel, documentHref, KIND_LABEL } from "@/components/document-status";
 import { StartStudyButton } from "@/components/start-study-button";
@@ -10,6 +9,7 @@ import { countCandidatesByDocument } from "@/server/repo/candidates";
 import { listDocuments } from "@/server/repo/documents";
 import { getSettings } from "@/server/repo/settings";
 import { countStudyToday } from "@/server/repo/study";
+import { requireUser } from "@/server/auth/current-user";
 
 const RECENT_DOCUMENTS = 5;
 
@@ -25,7 +25,7 @@ export default function Home() {
 }
 
 async function TodaySummary() {
-  await connection();
+  await requireUser();
   const db = getDb();
   const now = new Date();
   const settings = getSettings(db);

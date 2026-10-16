@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { connection } from "next/server";
 import { Suspense } from "react";
 import { DocumentStatusLabel, documentHref, KIND_LABEL } from "@/components/document-status";
 import { Failed } from "@/components/ui/status";
@@ -8,6 +7,7 @@ import { countFailedMeaningsByDocument, countOccurrencesByDocument } from "@/ser
 import { countCandidatesByDocument } from "@/server/repo/candidates";
 import { listDocuments } from "@/server/repo/documents";
 import { UploadForm } from "./upload-form";
+import { requireUser } from "@/server/auth/current-user";
 
 export default function DocumentsPage() {
   return (
@@ -22,7 +22,7 @@ export default function DocumentsPage() {
 }
 
 async function DocumentList() {
-  await connection();
+  await requireUser();
   const db = getDb();
   const docs = listDocuments(db);
   const candidateCounts = countCandidatesByDocument(db);

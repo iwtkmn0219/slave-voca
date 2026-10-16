@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { connection } from "next/server";
 import { Suspense } from "react";
 import { KIND_LABEL } from "@/components/document-status";
 import { Notice } from "@/components/ui/notice";
@@ -9,6 +8,7 @@ import { countOccurrencesByWord, listOccurrencesByDocument } from "@/server/repo
 import { getDocument } from "@/server/repo/documents";
 import { RetryAllButton } from "./retry-all-button";
 import { WordTable } from "./word-table";
+import { requireUser } from "@/server/auth/current-user";
 
 // 문서 단어 목록. 뜻 고치기·다시 시도·카드 삭제는 표(WordTable)에서, 문서 전체 다시 시도는 안내 줄에서 한다.
 export default function DocumentWordsPage({ params }: PageProps<"/documents/[id]">) {
@@ -20,7 +20,7 @@ export default function DocumentWordsPage({ params }: PageProps<"/documents/[id]
 }
 
 async function DocumentWords({ params }: { params: Promise<{ id: string }> }) {
-  await connection();
+  await requireUser();
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
 

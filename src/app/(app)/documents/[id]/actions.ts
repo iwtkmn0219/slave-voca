@@ -6,6 +6,7 @@ import { getDb } from "@/server/db/client";
 import { deleteCard, listFailedMeaningIds, occurrencesBelongTo } from "@/server/repo/cards";
 import { MISSING_KEY_MESSAGE } from "@/lib/regen-messages";
 import { defaultMeaningModel, regenerateMeanings } from "@/server/services/enrich";
+import { requireUser } from "@/server/auth/current-user";
 
 const BAD_REQUEST = "잘못된 요청입니다.";
 
@@ -24,6 +25,7 @@ export async function regenerateDocumentMeanings(
   documentId: unknown,
   occurrenceIds: unknown,
 ): Promise<RegenerateActionResult> {
+  await requireUser();
   const ids = parseIdList(occurrenceIds);
   if (!isId(documentId) || ids === null) return { error: BAD_REQUEST };
   const db = getDb();
@@ -37,6 +39,7 @@ export async function regenerateDocumentMeanings(
 
 // 카드 삭제: 모든 문서의 용례와 복습 기록이 함께 지워진다.
 export async function removeCard(documentId: unknown, wordId: unknown): Promise<{ error: string | null }> {
+  await requireUser();
   if (!isId(documentId) || !isId(wordId)) return { error: BAD_REQUEST };
   if (!deleteCard(getDb(), wordId)) return { error: "카드를 찾을 수 없습니다." };
   refresh(documentId);

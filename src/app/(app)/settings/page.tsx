@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
-import { connection } from "next/server";
 import { Suspense } from "react";
 import { isTheme, THEME_COOKIE } from "@/lib/settings";
 import { getDb } from "@/server/db/client";
 import { getSettings } from "@/server/repo/settings";
 import { SettingsForm } from "./settings-form";
+import { requireUser } from "@/server/auth/current-user";
 
 export default function SettingsPage() {
   return (
@@ -18,7 +18,7 @@ export default function SettingsPage() {
 }
 
 async function CurrentSettings() {
-  await connection();
+  await requireUser();
   const settings = getSettings(getDb());
   const stored = (await cookies()).get(THEME_COOKIE)?.value;
   return <SettingsForm initial={{ ...settings, theme: isTheme(stored) ? stored : "system" }} />;
