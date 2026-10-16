@@ -1,19 +1,10 @@
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { buildFrequencyMap } from '../src/lib/extract/build-frequency-map';
 
-const SOURCE_URL =
-  'https://raw.githubusercontent.com/first20hours/google-10000-english/master/20k.txt';
+// scripts/export-wordfreq.py가 쓴 빈도순 단어 목록(한 줄에 하나)을 data/frequency.json으로 바꾼다.
+const SOURCE = process.argv[2] ?? 'data/wordfreq-en.txt';
 
-async function main() {
-  const res = await fetch(SOURCE_URL);
-  if (!res.ok) throw new Error(`빈도 목록 다운로드 실패: HTTP ${res.status}`);
-  const words = (await res.text()).split(/\r?\n/);
-  const map = buildFrequencyMap(words);
-  writeFileSync('data/frequency.json', JSON.stringify(map));
-  console.log(`data/frequency.json: ${Object.keys(map).length}개 항목`);
-}
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+const words = readFileSync(SOURCE, 'utf8').split(/\r?\n/);
+const map = buildFrequencyMap(words);
+writeFileSync('data/frequency.json', JSON.stringify(map));
+console.log(`data/frequency.json: ${Object.keys(map).length}개 항목`);

@@ -9,7 +9,7 @@ export interface Settings {
   autoSpeak: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { excludeTopN: 5000, dailyNewLimit: 20, autoSpeak: false };
+export const DEFAULT_SETTINGS: Settings = { excludeTopN: 3000, dailyNewLimit: 20, autoSpeak: false };
 
 const KEYS: Record<keyof Settings, string> = {
   excludeTopN: 'exclude_top_n',

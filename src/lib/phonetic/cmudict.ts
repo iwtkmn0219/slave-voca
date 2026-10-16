@@ -27,22 +27,21 @@ export function cmudictLookup(word: string): string | null {
   return cached(word);
 }
 
-// CMUdict(미국식, 발음 듣기 en-US와 같은 표기)를 먼저 찾고, 없을 때만 사전 API를 부른다.
-// 자주 멈추는 API 호출이 줄어든다. CMUdict 조회가 실패해도(파일 없음 등) 저장 전체를 오류로 만들지 않고
-// API로 넘어간다. 로그는 한 번만 남긴다.
-export function withCmudictFirst(
-  apiLookup: (word: string) => Promise<string | null>,
+// 발음기호는 CMUdict(미국식, 발음 듣기 en-US와 같은 표기)에서만 찾는다. 조회가 실패해도(파일 없음 등)
+// 저장 전체를 오류로 만들지 않고 발음기호 없이 둔다. 로그는 한 번만 남긴다.
+// (2026-10-16 M5: 사전 API dictionaryapi.dev는 이용 조건이 밝혀져 있지 않고, 실측에서 CMUdict에 없는 단어를
+// 채운 적이 없어 뺐다.)
+export function createCmudictPhonetic(
   primary: PhoneticSource = cmudictLookup,
 ): (word: string) => Promise<string | null> {
   let logged = false;
   return async (word) => {
     try {
-      const found = primary(word);
-      if (found) return found;
+      return primary(word);
     } catch (err) {
       if (!logged) console.error('CMUdict 발음기호 조회 실패', err);
       logged = true;
+      return null;
     }
-    return apiLookup(word);
   };
 }

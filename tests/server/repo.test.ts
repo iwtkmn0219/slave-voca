@@ -108,7 +108,7 @@ describe('settings repo', () => {
         { key: 'auto_speak', value: 'yes' },
       ])
       .run();
-    expect(getSettings(db)).toEqual({ excludeTopN: 5000, dailyNewLimit: 0, autoSpeak: false });
+    expect(getSettings(db)).toEqual({ excludeTopN: 3000, dailyNewLimit: 0, autoSpeak: false });
   });
 
   it('saves all settings and overwrites earlier values', () => {

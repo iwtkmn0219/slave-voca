@@ -9,7 +9,6 @@ import {
   MAX_PDF_BYTES,
   UploadError,
 } from '@/server/services/ingest';
-import { hasAcademicList } from '@/lib/extract/academic';
 import { makePdf } from '../helpers/make-pdf';
 
 // 실제 빈도표(data/frequency.json)를 쓴다. heterogeneous·perturbation은 상위 5,000 밖이다.
@@ -42,7 +41,7 @@ describe('ingestPdf', () => {
     expect(lemmas).not.toContain('paper');
   });
 
-  it('applies the real word lists: academic rescue, dictionary flag, line-end compounds', async () => {
+  it('applies the real word lists: frequency cutoff, dictionary flag, line-end compounds', async () => {
     const pdf = makePdf([
       [
         ...PAPER,
@@ -55,8 +54,7 @@ describe('ingestPdf', () => {
     ]);
     const result = await ingestPdf(db, input(pdf));
     const byLemma = new Map(listCandidates(db, result.documentId).map((c) => [c.lemma, c]));
-    // 순위 4567, AWL 대표어: data/awl.json이 있을 때만 학술어 예외로 남는다(N=5000)
-    expect(byLemma.has('hence')).toBe(hasAcademicList());
+    expect(byLemma.has('hence')).toBe(true); // wordfreq 순위 3,687, 기본 기준 N=3,000 밖
     expect(byLemma.get('conv')?.inDictionary).toBe(false);
     expect(byLemma.get('heterogeneous')?.inDictionary).toBe(true);
     expect(byLemma.has('finetuning')).toBe(false);

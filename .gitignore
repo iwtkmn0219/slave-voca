@@ -44,6 +44,6 @@ next-env.d.ts
 /data/*.db
 /data/*.db-*
 
-# AWL headwords: no stated license, build your own (README)
-/data/awl.json
+# wordfreq export (regenerate with npm run freq:build)
+/data/wordfreq-en.txt
 !.env.example
