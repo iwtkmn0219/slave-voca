@@ -244,4 +244,4 @@ scripts/
 - 2026-10-16: M4-4(문맥 뜻 품질) 설계 추가. 실측 결과와 채택하지 않은 방법 기록
 - 2026-10-16: M4-4 완료 반영(사고 단계 LOW, 묶음 50개, 동시 5개)
 - 2026-10-16: GitHub 공개(사용자 결정, MIT). AWL 목록을 저장소·기록에서 빼고 실행 시 있으면 읽도록 바꿈(8.7). 기록을 고쳐 쓰면서 커밋 해시가 바뀌어, 문서의 해시를 새 값으로 갱신
-- 2026-10-16: GitHub Flow·버전 관리 결정(사용자). 설계 `docs/superpowers/specs/2026-10-16-github-flow-versioning-design.md`, 첫 릴리스 v0.4.0
+- 2026-10-16: 브랜치·PR 흐름과 버전 관리 결정(사용자). main은 배포용, development는 개발 통합용(기본 브랜치). 설계 `docs/superpowers/specs/2026-10-16-github-flow-versioning-design.md`, 첫 릴리스 v0.4.0
