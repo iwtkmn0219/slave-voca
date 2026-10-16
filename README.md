@@ -39,6 +39,10 @@ npm run dev
 | 영어 사전 확인 | `wink-lexicon`(WordNet 파생) | MIT / WordNet 라이선스 |
 | `data/awl.json` | 저장소에 없음(위 참고) | — |
 
+## 개발 흐름과 버전
+
+[CONTRIBUTING.md](CONTRIBUTING.md)와 [CHANGELOG.md](CHANGELOG.md)를 보세요.
+
 ## 라이선스
 
 코드는 [MIT](LICENSE)입니다. 위 데이터 파일에는 각 출처의 조건이 따로 적용됩니다.
