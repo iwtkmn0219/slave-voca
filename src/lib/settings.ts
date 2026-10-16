@@ -1,5 +1,5 @@
 // 설정 화면 입력 검사. 서버 Action과 테스트가 쓴다(설계서 M4-2 3장).
-export const EXCLUDE_TOP_N_RANGE = { min: 1000, max: 20000 } as const; // 위 한계는 빈도 목록 길이(20,349단어)에 맞춘다
+export const EXCLUDE_TOP_N_RANGE = { min: 1000, max: 20000 } as const; // 위 한계는 빈도 목록 길이(wordfreq 20,000단어)에 맞춘다
 export const DAILY_NEW_LIMIT_RANGE = { min: 0, max: 200 } as const; // 0이면 새 카드 없이 복습만
 
 export const THEMES = ['system', 'light', 'dark'] as const;

@@ -1,4 +1,3 @@
-import { isAcademic } from '@/lib/extract/academic';
 import { inDictionary, isRealWord } from '@/lib/extract/dictionary';
 import { extractCandidates } from '@/lib/extract/extract';
 import { isFrequentWord, rankOf } from '@/lib/extract/frequency';
@@ -61,7 +60,6 @@ export async function ingestPdf(db: Db, input: IngestInput): Promise<IngestResul
       rankOf,
       knownLemmas: listKnownLemmas(db),
       existingLemmas: listWordLemmas(db),
-      isAcademic,
       inDictionary,
     });
     replaceCandidates(db, doc.id, found);

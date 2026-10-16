@@ -15,7 +15,6 @@ export interface ExtractOptions {
   rankOf: RankOf;
   knownLemmas: ReadonlySet<string>;
   existingLemmas: ReadonlySet<string>;
-  isAcademic: (lemma: string) => boolean;
   inDictionary: (lemma: string) => boolean;
 }
 
@@ -24,8 +23,6 @@ const NON_ASCII = /[^\x00-\x7F]/;
 const COMBINING_MARKS = /\p{M}/gu;
 const MIN_LENGTH = 3;
 const MAX_SENTENCE_LENGTH = 300;
-// 학술 핵심어 예외는 상위 2,000위 밖에만 적용한다. 그 안의 AWL 단어(area, data, code)는 쉽다.
-const ACADEMIC_RESCUE_MIN_RANK = 2001;
 
 interface Tally {
   lemma: string;
@@ -44,8 +41,7 @@ function bestRank(words: string[], rankOf: RankOf): number | undefined {
 function isExcludedByRank(lower: string, lemma: string, opts: ExtractOptions): boolean {
   // 표면형도 본다: data → datum처럼 원형이 드문 흔한 단어를 거른다.
   const rank = bestRank([lower, lemma], opts.rankOf);
-  if (rank === undefined || rank > opts.excludeTopN) return false;
-  return !(rank >= ACADEMIC_RESCUE_MIN_RANK && opts.isAcademic(lemma));
+  return rank !== undefined && rank <= opts.excludeTopN;
 }
 
 // 300자를 넘으면 단어가 보이도록 단어 주변을 잘라 정확히 300자로 맞춘다.
