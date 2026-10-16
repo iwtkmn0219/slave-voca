@@ -3,7 +3,7 @@
 - 작성일: 2026-10-15
 - 작성: Designer 세션
 - 상태: **승인됨 (2026-10-15)**. 방향은 A안 「지면」(검토 표는 B안의 밀도와 키보드 방식). 9장 기능 제안 중 포함 범위는 9장 첫머리의 결정 표를 따른다
-- 기준 커밋: main `126877f`
+- 기준 커밋: main `2f201e3`
 - 목업
   - `docs/superpowers/mockups/directions.html`: 세 방향 비교(복습 카드 뒷면 + 검토 표 일부)
   - `docs/superpowers/mockups/a-paper.html`: 추천안 A의 전체 화면(라이트·다크, 주소 끝에 `#dark`나 `#light`)

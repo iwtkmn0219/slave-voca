@@ -4,7 +4,7 @@
 
 **Goal:** 저장한 뜻을 믿고 매일 복습할 수 있게 한다. 뜻이 이상하면 "뜻 다시 만들기"로 새로 받는다(문서 단어 목록의 모든 행, 복습 카드 뒷면의 용례마다, 실패한 뜻 전체). 카드 삭제를 붙이고, 발음기호는 CMUdict를 먼저 쓴다. 작은 버그 2건과 저장 입력 검사도 고친다.
 
-**뜻을 직접 고치는 기능은 두지 않는다(2026-10-16 사용자 결정).** 모르는 단어를 공부하는 사람은 맞는 뜻을 알지 못하므로, 고치기 대신 다시 만들기를 모든 단어에 둔다. 이 계획은 64fbe55의 이전 판(뜻 고치기 포함)을 대체한다.
+**뜻을 직접 고치는 기능은 두지 않는다(2026-10-16 사용자 결정).** 모르는 단어를 공부하는 사람은 맞는 뜻을 알지 못하므로, 고치기 대신 다시 만들기를 모든 단어에 둔다. 이 계획은 fca3553의 이전 판(뜻 고치기 포함)을 대체한다.
 
 **Architecture:** 기존 구조 그대로다. 입력 검사(`lib/validate.ts`)와 키 판단(`lib/ui/keys.ts`)은 순수 함수, DB 변경은 `server/repo/cards.ts`, 뜻 생성 재사용은 `server/services/enrich.ts`에 둔다. 화면은 `documents/[id]`의 Server Action 2개(`regenerateDocumentMeanings`, `removeCard`)와 클라이언트 표(`WordTable`), 복습 화면의 Server Action `regenerateUsageMeaning`으로 만든다. 모든 Server Action은 인자를 `unknown`으로 받아 형태부터 확인한다.
 
